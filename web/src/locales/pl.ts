@@ -72,7 +72,12 @@ const pl: Messages = {
     plateInvalid: 'Podaj jeden z podanych numerów płyt',
   },
   viewer: {
-    placeholder: 'Widok 3D',
+    filament: 'Filament',
+    loadFailed: 'Nie udało się wczytać widoku 3D: {msg}',
+    live: 'Wróć na żywo',
+    byFilament: 'Filamenty',
+    byFeature: 'Typy ścieżek',
+    linesMode: 'Uproszczony widok (linie) dla dużego wydruku',
   },
   format: {
     minutes: '{m} min',

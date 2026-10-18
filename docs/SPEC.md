@@ -63,7 +63,8 @@ Drukarka pozostaje w **trybie chmurowym** — LAN Only Mode i Developer Mode **n
 ### Render (przeglądarka)
 - Czysty Three.js w komponencie Vue `<PrintViewer>`; scena i bufory poza reaktywnością (`markRaw`).
 - Bryły o realnej szerokości/wysokości ścieżki — instancje + własny shader.
-- Automatyczny fallback do linii przy zbyt dużym wydruku / słabym urządzeniu.
+- Automatyczny fallback do linii powyżej 2,5 mln odcinków (urządzenia dotykowe: 400 tys.); `?lines` w adresie strony wymusza linie (test).
+- Odcinek = instancja graniastosłupa o przekroju sześciokąta; start z punktu `i`, koniec i atrybuty z punktu `i+1` tego samego bufora (jeden upload na GPU). Dwa przejścia: nieprzezroczyste (wydrukowane + bieżąca) i przezroczysty „duch”.
 - Warstwy wydrukowane: pełne; bieżąca: wyróżniona (w całości jako „w trakcie”); pozostałe: półprzezroczysty „duch”.
 - Suwak warstw: tryb „na żywo” (podąża za wydrukiem) i ręczny, przycisk „wróć na żywo”.
 - Kolorowanie: domyślnie kolory filamentów, przełącznik na typy ścieżek.

@@ -70,7 +70,12 @@ const en = {
     plateInvalid: 'Enter one of the listed plate numbers',
   },
   viewer: {
-    placeholder: '3D view',
+    filament: 'Filament',
+    loadFailed: 'Could not load the 3D view: {msg}',
+    live: 'Back to live',
+    byFilament: 'Filaments',
+    byFeature: 'Path types',
+    linesMode: 'Simplified view (lines) for a large print',
   },
   format: {
     minutes: '{m} min',

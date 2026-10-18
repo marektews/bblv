@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, defineAsyncComponent } from 'vue'
 import { useI18n } from 'vue-i18n'
 import GeometryNotice from '../components/GeometryNotice.vue'
 import StateTag from '../components/StateTag.vue'
 import StatusPanel from '../components/StatusPanel.vue'
 import { connected, printers } from '../store'
+
+// Three.js is loaded only when a printer is opened.
+const PrintViewer = defineAsyncComponent(() => import('../components/PrintViewer.vue'))
 
 const props = defineProps<{ id: string }>()
 const { t } = useI18n()
@@ -25,7 +28,7 @@ const printer = computed(() => printers.value.find((p) => p.id === props.id))
     <div class="layout">
       <section class="main">
         <GeometryNotice :printer="printer" />
-        <div class="viewer">{{ t('viewer.placeholder') }}</div>
+        <PrintViewer :key="printer.id" :printer="printer" />
       </section>
       <aside>
         <StatusPanel :printer="printer" />
@@ -72,23 +75,9 @@ const printer = computed(() => printers.value.find((p) => p.id === props.id))
   gap: 12px;
 }
 
-.viewer {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: min(70vh, 720px);
-  border-radius: 8px;
-  background: var(--el-fill-color-light);
-  color: var(--el-text-color-secondary);
-}
-
 @media (max-width: 900px) {
   .layout {
     grid-template-columns: 1fr;
-  }
-
-  .viewer {
-    height: 60vh;
   }
 }
 </style>
