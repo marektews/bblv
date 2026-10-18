@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"syscall"
@@ -33,7 +34,8 @@ func runServe(args []string) error {
 	if err != nil {
 		return err
 	}
-	mon := monitor.New(store)
+	ffmpeg, _ := exec.LookPath("ffmpeg")
+	mon := monitor.New(store, ffmpeg)
 	if *replay != "" {
 		if err := mon.AddReplay(*replay, *speed); err != nil {
 			return err

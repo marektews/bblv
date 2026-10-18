@@ -27,12 +27,12 @@ Drukarka pozostaje w **trybie chmurowym** — LAN Only Mode i Developer Mode **n
 |---|---|---|
 | MQTT over TLS | 8883 | raporty stanu (tylko odczyt); login `bblp`, hasło = Access Code; topic `device/{serial}/report`, żądania `get_version` i `pushall` na `device/{serial}/request` |
 | FTPS (implicit TLS) | 990 | pobranie plików wydruku z karty SD; **tylko ścieżki względne** (`cache/...`) — absolutne (`/cache/...`) zwracają `550`; PASV (EPSV wyłączone) |
-| Kamera A1/P1 | 6000 | TLS, pakiet autoryzacji 80 B (`bblp` + Access Code), ramki: nagłówek 16 B (rozmiar LE) + JPEG 1080p (~150 KB) |
+| Kamera A1/P1 | 6000 | TLS, pakiet autoryzacji 80 B (`bblp` + Access Code), ramki: nagłówek 16 B (rozmiar LE) + JPEG 1536×1080 (~150 KB); zmierzone ~0,7 kl./s po zakończonym wydruku, pierwsza klatka po ~4,5 s |
 | Kamera X1/H2D | 322 | RTSPS, H.264 — przez zewnętrzny `ffmpeg` (jeśli w PATH) → MJPEG; bez ffmpeg brak kamery |
 | SSDP | UDP 2021 | wykrywanie drukarek (IP, serial, model, nazwa) |
 
 - Po połączeniu `pushall`, następnie scalanie raportów przyrostowych w pełny stan.
-- Jedno połączenie MQTT na drukarkę; kamera otwierana tylko gdy ktoś ogląda, jedno połączenie upstream rozdzielane na wszystkich widzów.
+- Jedno połączenie MQTT na drukarkę; kamera otwierana tylko gdy ktoś ogląda, jedno połączenie upstream rozdzielane na wszystkich widzów (`internal/camera.Hub`): zamykane 10 s po odejściu ostatniego widza, nowy widz dostaje od razu ostatnią klatkę, wolny widz gubi klatki zamiast blokować innych. Kamera RTSP: `ffmpeg -rtsp_transport tcp … -r 2 -f image2pipe -c:v mjpeg`.
 - Developer Mode / LAN Only i wersja firmware — weryfikacja przy pierwszym teście (etap 1).
 
 ## 3. Geometria i widok 3D
@@ -84,7 +84,7 @@ Stan (przygotowanie/druk/pauza/koniec/błąd), %, warstwa X/Y, pozostały czas +
 | GET | `/api/events` | SSE: zdarzenie `printer` z pełnym opisem drukarki (`id`, `name`, `model`, `experimental`, `online`, `status`, `geometry`) — po połączeniu dla każdej drukarki, potem przy każdej zmianie; nowy `geometry.key` = przeładuj geometrię |
 | GET | `/api/printers/{id}/geometry` | geometria binarna (z cache), gzip, `ETag` = `geometry.key` |
 | GET | `/api/printers/{id}/thumbnail` | miniatura z `.3mf` |
-| GET | `/api/printers/{id}/camera` | MJPEG (`multipart/x-mixed-replace`) |
+| GET | `/api/printers/{id}/camera` | MJPEG (`multipart/x-mixed-replace`); `camera: true` w opisie drukarki, gdy dostępna |
 | POST | `/api/printers/{id}/upload` | ręczny upload G-code / 3MF |
 | GET/POST/PUT/DELETE | `/api/config/printers…` | konfiguracja drukarek |
 | POST | `/api/discover` | wykrywanie SSDP |
@@ -167,7 +167,7 @@ docs/                specyfikacja
 - ~~Czy odczyt MQTT na A1 wymaga Developer Mode~~ — nie, działa w trybie chmurowym.
 - ~~Numer płyty i ścieżka pliku~~ — z plików `cache/N_<subtask>.bbl` (sekcja 3).
 - ~~Wymagania FTPS~~ — ścieżki względne, PASV, cache sesji TLS włączony.
-- ~~Rozdzielczość kamery A1~~ — 1080p, ~150 KB/klatkę; liczba kl./s do zmierzenia.
+- ~~Rozdzielczość kamery A1~~ — 1536×1080, ~150 KB/klatkę, ~0,7 kl./s (pomiar bez trwającego wydruku).
 - A1 nie raportuje numeru linii G-code (`mc_print_line_number` = 0) — postęp wewnątrz warstwy pozostaje poza zakresem.
 - Dostępne języki w bazie HMS Bambu.
 - Ścieżka `BambuStudio.conf` na Linuxie/macOS.

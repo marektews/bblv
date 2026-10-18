@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent } from 'vue'
 import { useI18n } from 'vue-i18n'
+import CameraPanel from '../components/CameraPanel.vue'
 import GeometryNotice from '../components/GeometryNotice.vue'
 import StateTag from '../components/StateTag.vue'
 import StatusPanel from '../components/StatusPanel.vue'
@@ -30,7 +31,8 @@ const printer = computed(() => printers.value.find((p) => p.id === props.id))
         <GeometryNotice :printer="printer" />
         <PrintViewer :key="printer.id" :printer="printer" />
       </section>
-      <aside>
+      <aside class="side">
+        <CameraPanel v-if="printer.camera" :key="printer.id" :printer="printer" />
         <StatusPanel :printer="printer" />
       </aside>
     </div>
@@ -69,7 +71,8 @@ const printer = computed(() => printers.value.find((p) => p.id === props.id))
   align-items: start;
 }
 
-.main {
+.main,
+.side {
   display: flex;
   flex-direction: column;
   gap: 12px;

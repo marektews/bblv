@@ -77,6 +77,13 @@ const en = {
     byFeature: 'Path types',
     linesMode: 'Simplified view (lines) for a large print',
   },
+  camera: {
+    title: 'Camera',
+    show: 'Show',
+    hide: 'Hide',
+    connecting: 'Connecting to the camera…',
+    unavailable: 'Camera unavailable, retrying…',
+  },
   format: {
     minutes: '{m} min',
     hoursMinutes: '{h} h {m} min',

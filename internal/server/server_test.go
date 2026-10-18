@@ -36,7 +36,7 @@ func setup(t *testing.T) *httptest.Server {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mon := monitor.New(store)
+	mon := monitor.New(store, "")
 	if err := mon.AddReplay(rec, 0); err != nil {
 		t.Fatal(err)
 	}

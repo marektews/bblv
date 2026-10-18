@@ -18,7 +18,7 @@ func eventually(t *testing.T, cond func() bool) {
 }
 
 func TestFetchOnNewPrintAndRetry(t *testing.T) {
-	m := New(nil)
+	m := New(nil, "")
 	calls := make(chan job, 10)
 	results := make(chan Geometry)
 	p := newPrinter(m, "p", "", "A1", nil)
@@ -66,7 +66,7 @@ func TestFetchOnNewPrintAndRetry(t *testing.T) {
 }
 
 func TestFinishedPrintIsNotRetried(t *testing.T) {
-	m := New(nil)
+	m := New(nil, "")
 	calls := make(chan job, 10)
 	p := newPrinter(m, "p", "", "X1C", nil)
 	p.fetcher = func(j job) Geometry {

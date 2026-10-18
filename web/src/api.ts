@@ -64,6 +64,7 @@ export interface PrinterInfo {
   model: string
   experimental: boolean
   online: boolean
+  camera: boolean
   status: Status
   geometry: Geometry
 }

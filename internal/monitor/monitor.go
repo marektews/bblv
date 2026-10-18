@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/marektews/bblv/internal/cache"
+	"github.com/marektews/bblv/internal/camera"
 	"github.com/marektews/bblv/internal/config"
 	"github.com/marektews/bblv/internal/printer"
 	"github.com/marektews/bblv/internal/printjob"
@@ -53,22 +54,25 @@ type Info struct {
 	Model        string         `json:"model"`
 	Experimental bool           `json:"experimental"`
 	Online       bool           `json:"online"`
+	Camera       bool           `json:"camera"`
 	Status       printer.Status `json:"status"`
 	Geometry     Geometry       `json:"geometry"`
 }
 
 // Monitor tracks a set of printers.
 type Monitor struct {
-	store *cache.Cache
+	store  *cache.Cache
+	ffmpeg string
 
 	mu       sync.Mutex
 	printers []*Printer
 	subs     map[chan Info]struct{}
 }
 
-// New creates an empty monitor storing geometry in store.
-func New(store *cache.Cache) *Monitor {
-	return &Monitor{store: store, subs: map[chan Info]struct{}{}}
+// New creates an empty monitor storing geometry in store. ffmpeg is the path
+// of the ffmpeg binary used for RTSP cameras, "" when not available.
+func New(store *cache.Cache, ffmpeg string) *Monitor {
+	return &Monitor{store: store, ffmpeg: ffmpeg, subs: map[chan Info]struct{}{}}
 }
 
 // AddPrinter adds a printer reached over the local network.
@@ -76,7 +80,23 @@ func (m *Monitor) AddPrinter(cfg config.Printer) {
 	p := newPrinter(m, cfg.ID, cfg.Name, cfg.Model, &mqttSource{cfg: cfg})
 	p.fetcher = p.fetchFTPS
 	p.cfg = cfg
+	if src := m.cameraSource(cfg); src != nil {
+		p.camera = camera.NewHub(cfg.ID, src)
+	}
 	m.add(p)
+}
+
+// cameraSource picks how to read the printer camera: X1 and H2 printers
+// stream RTSP, which needs ffmpeg; the others use the JPEG stream on port 6000.
+func (m *Monitor) cameraSource(cfg config.Printer) camera.Source {
+	model := strings.ToUpper(cfg.Model)
+	if strings.HasPrefix(model, "X1") || strings.HasPrefix(model, "H2") {
+		if m.ffmpeg == "" {
+			return nil
+		}
+		return camera.FFmpeg(m.ffmpeg, cfg.Host, cfg.AccessCode)
+	}
+	return camera.Port6000(cfg.Host, cfg.AccessCode)
 }
 
 // AddReplay adds a virtual printer with the id "replay" that plays back a
@@ -156,6 +176,14 @@ func (m *Monitor) Upload(id string, res *printjob.Result) error {
 		return ErrUnknownPrinter
 	}
 	p.upload(res)
+	return nil
+}
+
+// Camera returns the camera of a printer, nil when it has none.
+func (m *Monitor) Camera(id string) *camera.Hub {
+	if p := m.find(id); p != nil {
+		return p.camera
+	}
 	return nil
 }
 

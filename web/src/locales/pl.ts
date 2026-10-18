@@ -79,6 +79,13 @@ const pl: Messages = {
     byFeature: 'Typy ścieżek',
     linesMode: 'Uproszczony widok (linie) dla dużego wydruku',
   },
+  camera: {
+    title: 'Kamera',
+    show: 'Pokaż',
+    hide: 'Ukryj',
+    connecting: 'Łączenie z kamerą…',
+    unavailable: 'Kamera niedostępna, ponawiam…',
+  },
   format: {
     minutes: '{m} min',
     hoursMinutes: '{h} godz. {m} min',

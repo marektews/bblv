@@ -34,6 +34,7 @@ func New(mon *monitor.Monitor) http.Handler {
 	mux.HandleFunc("GET /api/printers/{id}", s.printer)
 	mux.HandleFunc("GET /api/printers/{id}/geometry", s.geometry)
 	mux.HandleFunc("GET /api/printers/{id}/thumbnail", s.thumbnail)
+	mux.HandleFunc("GET /api/printers/{id}/camera", s.camera)
 	mux.HandleFunc("POST /api/printers/{id}/upload", s.upload)
 	mux.HandleFunc("GET /api/events", s.events)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
@@ -72,6 +73,45 @@ func (s *server) thumbnail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	serveFile(w, r, thumbnail, key+"-png", "image/png", false)
+}
+
+// camera streams the printer camera as MJPEG (multipart/x-mixed-replace),
+// which browsers show in a plain <img>.
+func (s *server) camera(w http.ResponseWriter, r *http.Request) {
+	hub := s.mon.Camera(r.PathValue("id"))
+	if hub == nil {
+		writeError(w, http.StatusNotFound, "no camera")
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "streaming unsupported")
+		return
+	}
+	frames, cancel := hub.Subscribe()
+	defer cancel()
+	h := w.Header()
+	h.Set("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+	h.Set("Cache-Control", "no-cache, no-store")
+	h.Set("X-Accel-Buffering", "no")
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case img := <-frames:
+			if _, err := fmt.Fprintf(w, "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n", len(img)); err != nil {
+				return
+			}
+			// img is shared by all viewers and must not be modified.
+			if _, err := w.Write(img); err != nil {
+				return
+			}
+			if _, err := io.WriteString(w, "\r\n"); err != nil {
+				return
+			}
+			flusher.Flush()
+		}
+	}
 }
 
 // upload accepts a multipart form with a .gcode or .3mf "file" and an

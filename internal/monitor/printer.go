@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/marektews/bblv/internal/camera"
 	"github.com/marektews/bblv/internal/config"
 	"github.com/marektews/bblv/internal/ftps"
 	"github.com/marektews/bblv/internal/printer"
@@ -31,6 +32,7 @@ type Printer struct {
 	cfg             config.Printer
 	src             source
 	fetcher         func(job) Geometry // nil when geometry can only be uploaded
+	camera          *camera.Hub        // nil when the camera is not available
 
 	mu          sync.Mutex
 	online      bool
@@ -72,7 +74,7 @@ func (p *Printer) infoLocked() Info {
 	}
 	return Info{
 		ID: p.id, Name: p.name, Model: p.model, Experimental: experimental,
-		Online: p.online, Status: p.status, Geometry: p.geom,
+		Online: p.online, Camera: p.camera != nil, Status: p.status, Geometry: p.geom,
 	}
 }
 
