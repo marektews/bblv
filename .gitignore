@@ -1,0 +1,6 @@
+/data/
+/dist/
+/web/node_modules/
+/web/dist/
+*.exe
+config.json

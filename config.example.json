@@ -1,0 +1,12 @@
+{
+  "printers": [
+    {
+      "id": "a1",
+      "name": "A1",
+      "model": "A1",
+      "host": "192.168.1.50",
+      "serial": "SERIAL_NUMBER",
+      "access_code": "ACCESS_CODE"
+    }
+  ]
+}
