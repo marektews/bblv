@@ -94,17 +94,113 @@ export function geometryUrl(p: PrinterInfo): string {
   return `${printerUrl(p.id)}/geometry`
 }
 
+let onUnauthorized = () => {}
+
+// setUnauthorizedHandler sets what happens when the session is missing or expired.
+export function setUnauthorizedHandler(f: () => void) {
+  onUnauthorized = f
+}
+
+// request sends a JSON body (or a FormData) and decodes the JSON response.
+async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
+  const init: RequestInit = { method }
+  if (body instanceof FormData) {
+    init.body = body
+  } else if (body !== undefined) {
+    init.body = JSON.stringify(body)
+    init.headers = { 'Content-Type': 'application/json' }
+  }
+  const resp = await fetch(url, init)
+  if (resp.status === 401 && url !== '/api/login') {
+    onUnauthorized()
+  }
+  if (resp.status === 204) {
+    return undefined as T
+  }
+  const data = await resp.json().catch(() => ({}))
+  if (!resp.ok) {
+    throw new ApiError(resp.status, data)
+  }
+  return data as T
+}
+
 // uploadModel sends a .gcode or .3mf file as the geometry of the current print.
-export async function uploadModel(id: string, file: File, plate = 0): Promise<PrinterInfo> {
+export function uploadModel(id: string, file: File, plate = 0): Promise<PrinterInfo> {
   const form = new FormData()
   form.append('file', file)
   if (plate > 0) {
     form.append('plate', String(plate))
   }
-  const resp = await fetch(`${printerUrl(id)}/upload`, { method: 'POST', body: form })
-  const body = await resp.json().catch(() => ({}))
-  if (!resp.ok) {
-    throw new ApiError(resp.status, body)
+  return request('POST', `${printerUrl(id)}/upload`, form)
+}
+
+export interface AuthStatus {
+  required: boolean
+  authenticated: boolean
+}
+
+export const getAuth = () => request<AuthStatus>('GET', '/api/auth')
+export const login = (password: string) => request<void>('POST', '/api/login', { password })
+export const logout = () => request<void>('POST', '/api/logout')
+
+// PrinterConfig is a configured printer; the access code is never sent back.
+export interface PrinterConfig {
+  id: string
+  name: string
+  model: string
+  host: string
+  serial: string
+  hasAccessCode: boolean
+}
+
+export interface PrinterInput {
+  name: string
+  model: string
+  host: string
+  serial: string
+  accessCode: string // empty keeps the current code when editing
+}
+
+export interface AppConfig {
+  printers: PrinterConfig[]
+  passwordSet: boolean
+  studioConfig: { path: string; found: boolean }
+}
+
+export interface DiscoveredPrinter {
+  serial: string
+  host: string
+  model: string
+  modelCode: string
+  name: string
+  connect: string
+  firmware: string
+  lastSeen: string
+  configuredAs?: string
+}
+
+export interface ImportResult {
+  updated: string[]
+  found: number
+  missing: string[]
+}
+
+const printerConfigUrl = (id: string) => `/api/config/printers/${encodeURIComponent(id)}`
+
+export const getConfig = () => request<AppConfig>('GET', '/api/config')
+export const addPrinter = (p: PrinterInput) => request<PrinterConfig>('POST', '/api/config/printers', p)
+export const updatePrinter = (id: string, p: PrinterInput) => request<PrinterConfig>('PUT', printerConfigUrl(id), p)
+export const deletePrinter = (id: string) => request<void>('DELETE', printerConfigUrl(id))
+export const getDiscovered = () => request<{ devices: DiscoveredPrinter[]; error?: string }>('GET', '/api/config/discovered')
+export const setPassword = (current: string, password: string) => request<void>('PUT', '/api/config/password', { current, password })
+
+// importCodes copies access codes from an uploaded BambuStudio.conf or, without
+// a file, from the one on the computer running the server.
+export function importCodes(file?: File): Promise<ImportResult> {
+  if (!file) {
+    return request('POST', '/api/config/import-codes')
   }
-  return body as PrinterInfo
+  const form = new FormData()
+  form.append('file', file)
+  return request('POST', '/api/config/import-codes', form)
 }

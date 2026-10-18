@@ -9,12 +9,16 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/marektews/bblv/internal/auth"
+	"github.com/marektews/bblv/internal/config"
+	"github.com/marektews/bblv/internal/discovery"
 	"github.com/marektews/bblv/internal/monitor"
 	"github.com/marektews/bblv/internal/printjob"
 	"github.com/marektews/bblv/internal/webui"
@@ -23,13 +27,34 @@ import (
 const maxUpload = 512 << 20
 
 type server struct {
-	mon *monitor.Monitor
+	mon  *monitor.Monitor
+	cfg  *config.Store
+	auth *auth.Auth
+	disc *discovery.Listener
+}
+
+// Deps are the services used by the handlers.
+type Deps struct {
+	Monitor   *monitor.Monitor
+	Config    *config.Store
+	Auth      *auth.Auth
+	Discovery *discovery.Listener
 }
 
 // New returns the HTTP handler of the application.
-func New(mon *monitor.Monitor) http.Handler {
-	s := &server{mon: mon}
+func New(d Deps) http.Handler {
+	s := &server{mon: d.Monitor, cfg: d.Config, auth: d.Auth, disc: d.Discovery}
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/auth", s.authStatus)
+	mux.HandleFunc("POST /api/login", s.login)
+	mux.HandleFunc("POST /api/logout", s.logout)
+	mux.HandleFunc("GET /api/config", s.getConfig)
+	mux.HandleFunc("POST /api/config/printers", s.addPrinter)
+	mux.HandleFunc("PUT /api/config/printers/{id}", s.updatePrinter)
+	mux.HandleFunc("DELETE /api/config/printers/{id}", s.deletePrinter)
+	mux.HandleFunc("GET /api/config/discovered", s.discovered)
+	mux.HandleFunc("POST /api/config/import-codes", s.importCodes)
+	mux.HandleFunc("PUT /api/config/password", s.setPassword)
 	mux.HandleFunc("GET /api/printers", s.printers)
 	mux.HandleFunc("GET /api/printers/{id}", s.printer)
 	mux.HandleFunc("GET /api/printers/{id}/geometry", s.geometry)
@@ -41,7 +66,28 @@ func New(mon *monitor.Monitor) http.Handler {
 		writeError(w, http.StatusNotFound, "not found")
 	})
 	mux.Handle("/", webui.Handler())
-	return mux
+	return s.protect(mux)
+}
+
+// protect requires a session for the API when a password is set, and
+// rejects changes requested by pages of other sites.
+func (s *server) protect(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			if origin := r.Header.Get("Origin"); origin != "" {
+				if u, err := url.Parse(origin); err != nil || u.Host != r.Host {
+					writeError(w, http.StatusForbidden, "cross-origin request")
+					return
+				}
+			}
+		}
+		p := r.URL.Path
+		if strings.HasPrefix(p, "/api/") && p != "/api/auth" && p != "/api/login" && !s.auth.Valid(r) {
+			writeError(w, http.StatusUnauthorized, "login required")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *server) printers(w http.ResponseWriter, r *http.Request) {
@@ -169,8 +215,9 @@ func (s *server) upload(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, info)
 }
 
-// events streams Server-Sent Events: one "printer" event with the printer
-// info for every printer on connect and after every change.
+// events streams Server-Sent Events: a "printer" event with the printer info
+// for every printer on connect and after every change, and a "removed" event
+// with the id of a printer that is no longer configured.
 func (s *server) events(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -184,16 +231,20 @@ func (s *server) events(w http.ResponseWriter, r *http.Request) {
 
 	updates, cancel := s.mon.Subscribe()
 	defer cancel()
-	send := func(info monitor.Info) error {
-		b, err := json.Marshal(info)
+	send := func(e monitor.Event) error {
+		var data any = e.Info
+		if e.Type == "removed" {
+			data = map[string]string{"id": e.Info.ID}
+		}
+		b, err := json.Marshal(data)
 		if err != nil {
 			return err
 		}
-		_, err = fmt.Fprintf(w, "event: printer\ndata: %s\n\n", b)
+		_, err = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", e.Type, b)
 		return err
 	}
 	for _, info := range s.mon.Printers() {
-		if send(info) != nil {
+		if send(monitor.Event{Type: "printer", Info: info}) != nil {
 			return
 		}
 	}
@@ -205,8 +256,8 @@ func (s *server) events(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-r.Context().Done():
 			return
-		case info := <-updates:
-			if send(info) != nil {
+		case e := <-updates:
+			if send(e) != nil {
 				return
 			}
 		case <-ping.C:

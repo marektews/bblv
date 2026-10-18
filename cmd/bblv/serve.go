@@ -14,8 +14,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/marektews/bblv/internal/auth"
 	"github.com/marektews/bblv/internal/cache"
 	"github.com/marektews/bblv/internal/config"
+	"github.com/marektews/bblv/internal/discovery"
 	"github.com/marektews/bblv/internal/monitor"
 	"github.com/marektews/bblv/internal/printjob"
 	"github.com/marektews/bblv/internal/server"
@@ -34,6 +36,10 @@ func runServe(args []string) error {
 	if err != nil {
 		return err
 	}
+	cfgStore, err := config.OpenStore(*dataDir)
+	if err != nil {
+		return err
+	}
 	ffmpeg, _ := exec.LookPath("ffmpeg")
 	mon := monitor.New(store, ffmpeg)
 	if *replay != "" {
@@ -48,10 +54,7 @@ func runServe(args []string) error {
 			mon.Upload("replay", res)
 		}
 	} else {
-		cfg, err := config.Load(*dataDir)
-		if err != nil {
-			return err
-		}
+		cfg := cfgStore.Get()
 		if len(cfg.Printers) == 0 {
 			slog.Warn("no printers configured", "config", filepath.Join(*dataDir, config.FileName))
 		}
@@ -63,10 +66,11 @@ func runServe(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go mon.Run(ctx)
+	disc := discovery.Listen(ctx)
 
 	srv := &http.Server{
 		Addr:              *listen,
-		Handler:           server.New(mon),
+		Handler:           server.New(server.Deps{Monitor: mon, Config: cfgStore, Auth: auth.New(cfgStore), Discovery: disc}),
 		ReadHeaderTimeout: 10 * time.Second,
 		// Cancels long-lived event streams on shutdown.
 		BaseContext: func(net.Listener) context.Context { return ctx },

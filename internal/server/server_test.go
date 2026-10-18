@@ -15,7 +15,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/marektews/bblv/internal/auth"
 	"github.com/marektews/bblv/internal/cache"
+	"github.com/marektews/bblv/internal/config"
 	"github.com/marektews/bblv/internal/monitor"
 )
 
@@ -26,6 +28,11 @@ const recordingFile = `{"t":"2026-10-18T20:00:00Z","kind":"meta","model":"A1"}
 const gcodeFile = "; CHANGE_LAYER\n; LAYER_HEIGHT: 0.2\n; LINE_WIDTH: 0.4\nG90\nM83\nG1 X0 Y0 Z0.2\nG1 X10 E1\n"
 
 func setup(t *testing.T) *httptest.Server {
+	ts, _ := setupWithConfig(t)
+	return ts
+}
+
+func setupWithConfig(t *testing.T) (*httptest.Server, *config.Store) {
 	t.Helper()
 	dir := t.TempDir()
 	rec := filepath.Join(dir, "rec.jsonl")
@@ -51,9 +58,13 @@ func setup(t *testing.T) *httptest.Server {
 			t.Fatal("replay did not start")
 		}
 	}
-	ts := httptest.NewServer(New(mon))
+	cfg, err := config.OpenStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(New(Deps{Monitor: mon, Config: cfg, Auth: auth.New(cfg)}))
 	t.Cleanup(ts.Close)
-	return ts
+	return ts, cfg
 }
 
 func getJSON(t *testing.T, url string, v any) int {

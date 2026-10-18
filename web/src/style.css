@@ -29,6 +29,11 @@ a {
   flex: 1;
 }
 
+.app-header .nav {
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+}
+
 .app-main {
   padding: 16px;
   max-width: 1600px;

@@ -5,6 +5,7 @@ go 1.24.2
 require (
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/jlaffaye/ftp v0.2.4
+	golang.org/x/crypto v0.42.0
 )
 
 require (

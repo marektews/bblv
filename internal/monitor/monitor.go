@@ -59,31 +59,79 @@ type Info struct {
 	Geometry     Geometry       `json:"geometry"`
 }
 
+// Event is sent to subscribers: Type "printer" carries the current info of
+// a printer, Type "removed" only its ID.
+type Event struct {
+	Type string
+	Info Info
+}
+
 // Monitor tracks a set of printers.
 type Monitor struct {
 	store  *cache.Cache
 	ffmpeg string
 
 	mu       sync.Mutex
+	ctx      context.Context // set by Run; printers added later start at once
+	wg       sync.WaitGroup
 	printers []*Printer
-	subs     map[chan Info]struct{}
+	subs     map[chan Event]struct{}
 }
 
 // New creates an empty monitor storing geometry in store. ffmpeg is the path
 // of the ffmpeg binary used for RTSP cameras, "" when not available.
 func New(store *cache.Cache, ffmpeg string) *Monitor {
-	return &Monitor{store: store, ffmpeg: ffmpeg, subs: map[chan Info]struct{}{}}
+	return &Monitor{store: store, ffmpeg: ffmpeg, subs: map[chan Event]struct{}{}}
 }
 
 // AddPrinter adds a printer reached over the local network.
 func (m *Monitor) AddPrinter(cfg config.Printer) {
+	m.add(m.networkPrinter(cfg))
+}
+
+// ReplacePrinter applies a changed configuration by reconnecting the printer
+// with the same ID, keeping its position.
+func (m *Monitor) ReplacePrinter(cfg config.Printer) error {
+	p := m.networkPrinter(cfg)
+	m.mu.Lock()
+	i := m.index(cfg.ID)
+	if i < 0 {
+		m.mu.Unlock()
+		return ErrUnknownPrinter
+	}
+	old := m.printers[i]
+	m.printers[i] = p
+	m.startLocked(p)
+	m.mu.Unlock()
+	old.close()
+	m.publish(Event{Type: "printer", Info: p.info()})
+	return nil
+}
+
+// RemovePrinter stops following a printer.
+func (m *Monitor) RemovePrinter(id string) error {
+	m.mu.Lock()
+	i := m.index(id)
+	if i < 0 {
+		m.mu.Unlock()
+		return ErrUnknownPrinter
+	}
+	old := m.printers[i]
+	m.printers = append(m.printers[:i], m.printers[i+1:]...)
+	m.mu.Unlock()
+	old.close()
+	m.publish(Event{Type: "removed", Info: Info{ID: id}})
+	return nil
+}
+
+func (m *Monitor) networkPrinter(cfg config.Printer) *Printer {
 	p := newPrinter(m, cfg.ID, cfg.Name, cfg.Model, &mqttSource{cfg: cfg})
 	p.fetcher = p.fetchFTPS
 	p.cfg = cfg
 	if src := m.cameraSource(cfg); src != nil {
 		p.camera = camera.NewHub(cfg.ID, src)
 	}
-	m.add(p)
+	return p
 }
 
 // cameraSource picks how to read the printer camera: X1 and H2 printers
@@ -114,22 +162,44 @@ func (m *Monitor) AddReplay(path string, speed float64) error {
 func (m *Monitor) add(p *Printer) {
 	m.mu.Lock()
 	m.printers = append(m.printers, p)
+	m.startLocked(p)
 	m.mu.Unlock()
+	m.publish(Event{Type: "printer", Info: p.info()})
 }
 
-// Run follows all printers until ctx is cancelled.
+// startLocked runs the printer when the monitor is running.
+func (m *Monitor) startLocked(p *Printer) {
+	if m.ctx == nil {
+		return
+	}
+	ctx, cancel := context.WithCancel(m.ctx)
+	p.stop = cancel
+	m.wg.Add(1)
+	go func() {
+		defer m.wg.Done()
+		p.run(ctx)
+	}()
+}
+
+func (m *Monitor) index(id string) int {
+	for i, p := range m.printers {
+		if p.id == id {
+			return i
+		}
+	}
+	return -1
+}
+
+// Run follows the printers until ctx is cancelled.
 func (m *Monitor) Run(ctx context.Context) {
-	var wg sync.WaitGroup
 	m.mu.Lock()
+	m.ctx = ctx
 	for _, p := range m.printers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			p.run(ctx)
-		}()
+		m.startLocked(p)
 	}
 	m.mu.Unlock()
-	wg.Wait()
+	<-ctx.Done()
+	m.wg.Wait()
 }
 
 // Printers returns all printers in configuration order.
@@ -192,10 +262,10 @@ func (m *Monitor) Store() *cache.Cache {
 	return m.store
 }
 
-// Subscribe returns a channel receiving the printer info after every change
+// Subscribe returns a channel receiving an event after every change
 // and a function to unsubscribe. Slow subscribers miss updates.
-func (m *Monitor) Subscribe() (<-chan Info, func()) {
-	ch := make(chan Info, 64)
+func (m *Monitor) Subscribe() (<-chan Event, func()) {
+	ch := make(chan Event, 64)
 	m.mu.Lock()
 	m.subs[ch] = struct{}{}
 	m.mu.Unlock()
@@ -206,12 +276,12 @@ func (m *Monitor) Subscribe() (<-chan Info, func()) {
 	}
 }
 
-func (m *Monitor) publish(info Info) {
+func (m *Monitor) publish(e Event) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for ch := range m.subs {
 		select {
-		case ch <- info:
+		case ch <- e:
 		default:
 		}
 	}

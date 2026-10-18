@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/marektews/bblv/internal/camera"
@@ -33,6 +34,8 @@ type Printer struct {
 	src             source
 	fetcher         func(job) Geometry // nil when geometry can only be uploaded
 	camera          *camera.Hub        // nil when the camera is not available
+	stop            context.CancelFunc // set while running
+	removed         atomic.Bool
 
 	mu          sync.Mutex
 	online      bool
@@ -57,6 +60,25 @@ func newPrinter(m *Monitor, id, name, model string, src source) *Printer {
 
 func (p *Printer) run(ctx context.Context) {
 	p.src.run(ctx, p.onStatus, p.onConnection)
+}
+
+// close stops the printer after it was removed or replaced.
+func (p *Printer) close() {
+	p.removed.Store(true)
+	if p.stop != nil {
+		p.stop()
+	}
+	if p.camera != nil {
+		p.camera.Close()
+	}
+}
+
+// publish sends an update unless the printer is no longer monitored, which
+// may happen while its last report is still being handled.
+func (p *Printer) publish(info Info) {
+	if !p.removed.Load() {
+		p.m.publish(Event{Type: "printer", Info: info})
+	}
 }
 
 func (p *Printer) info() Info {
@@ -85,7 +107,7 @@ func (p *Printer) onConnection(ok bool) {
 	info := p.infoLocked()
 	p.mu.Unlock()
 	if changed {
-		p.m.publish(info)
+		p.publish(info)
 	}
 }
 
@@ -100,7 +122,7 @@ func (p *Printer) onStatus(s printer.Status) {
 	j := p.nextJob(s)
 	info := p.infoLocked()
 	p.mu.Unlock()
-	p.m.publish(info)
+	p.publish(info)
 	if j != nil {
 		go p.fetch(*j)
 	}
@@ -143,7 +165,7 @@ func (p *Printer) fetch(j job) {
 	p.geom = g
 	info := p.infoLocked()
 	p.mu.Unlock()
-	p.m.publish(info)
+	p.publish(info)
 }
 
 func (p *Printer) fetchFTPS(j job) Geometry {
@@ -186,7 +208,7 @@ func (p *Printer) upload(res *printjob.Result) {
 	}
 	info := p.infoLocked()
 	p.mu.Unlock()
-	p.m.publish(info)
+	p.publish(info)
 }
 
 // source delivers status updates of one printer.

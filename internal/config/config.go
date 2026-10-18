@@ -11,6 +11,9 @@ import (
 	"runtime"
 )
 
+// ErrNotFound is returned for an unknown printer id.
+var ErrNotFound = errors.New("printer not found")
+
 // FileName is the name of the configuration file inside the data directory.
 const FileName = "config.json"
 
@@ -26,8 +29,9 @@ type Printer struct {
 
 // Config is the whole content of config.json.
 type Config struct {
-	PasswordHash string    `json:"password_hash,omitempty"`
-	Printers     []Printer `json:"printers"`
+	PasswordHash  string    `json:"password_hash,omitempty"`
+	SessionSecret string    `json:"session_secret,omitempty"` // signs login cookies; replaced with the password
+	Printers      []Printer `json:"printers"`
 }
 
 // DefaultDataDir returns the OS specific default data directory.
@@ -98,5 +102,5 @@ func (c *Config) Printer(id string) (*Printer, error) {
 			return &c.Printers[i], nil
 		}
 	}
-	return nil, fmt.Errorf("printer %q not found", id)
+	return nil, fmt.Errorf("%w: %q", ErrNotFound, id)
 }

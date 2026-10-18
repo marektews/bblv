@@ -21,6 +21,7 @@ type Hub struct {
 	latest []byte
 	cancel context.CancelFunc // set while the source runs
 	idle   *time.Timer
+	closed bool
 }
 
 // NewHub creates a hub; name identifies the camera in logs.
@@ -42,12 +43,28 @@ func (h *Hub) Subscribe() (<-chan []byte, func()) {
 		h.idle.Stop()
 		h.idle = nil
 	}
-	if h.cancel == nil {
+	if h.cancel == nil && !h.closed {
 		ctx, cancel := context.WithCancel(context.Background())
 		h.cancel = cancel
 		go h.run(ctx)
 	}
 	return ch, func() { h.unsubscribe(ch) }
+}
+
+// Close stops the stream for good, e.g. when the printer is removed.
+func (h *Hub) Close() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.closed = true
+	h.latest = nil
+	if h.idle != nil {
+		h.idle.Stop()
+		h.idle = nil
+	}
+	if h.cancel != nil {
+		h.cancel()
+		h.cancel = nil
+	}
 }
 
 func (h *Hub) unsubscribe(ch chan []byte) {

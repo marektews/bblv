@@ -29,7 +29,7 @@ Drukarka pozostaje w **trybie chmurowym** — LAN Only Mode i Developer Mode **n
 | FTPS (implicit TLS) | 990 | pobranie plików wydruku z karty SD; **tylko ścieżki względne** (`cache/...`) — absolutne (`/cache/...`) zwracają `550`; PASV (EPSV wyłączone) |
 | Kamera A1/P1 | 6000 | TLS, pakiet autoryzacji 80 B (`bblp` + Access Code), ramki: nagłówek 16 B (rozmiar LE) + JPEG 1536×1080 (~150 KB); zmierzone ~0,7 kl./s po zakończonym wydruku, pierwsza klatka po ~4,5 s |
 | Kamera X1/H2D | 322 | RTSPS, H.264 — przez zewnętrzny `ffmpeg` (jeśli w PATH) → MJPEG; bez ffmpeg brak kamery |
-| SSDP | UDP 2021 | wykrywanie drukarek (IP, serial, model, nazwa) |
+| SSDP | UDP 2021 | wykrywanie: drukarka wysyła `NOTIFY` co ~10 s (z portu 1900); nagłówki `Location` (IP), `USN` (serial), `DevModel.bambu.com` (kod modelu, np. `N2S` = A1), `DevName.bambu.com`, `DevConnect.bambu.com`, `DevVersion.bambu.com`; port współdzielony z Bambu Studio (`SO_REUSEADDR`); serwer nasłuchuje w tle od startu |
 
 - Po połączeniu `pushall`, następnie scalanie raportów przyrostowych w pełny stan.
 - Jedno połączenie MQTT na drukarkę; kamera otwierana tylko gdy ktoś ogląda, jedno połączenie upstream rozdzielane na wszystkich widzów (`internal/camera.Hub`): zamykane 10 s po odejściu ostatniego widza, nowy widz dostaje od razu ostatnią klatkę, wolny widz gubi klatki zamiast blokować innych. Kamera RTSP: `ffmpeg -rtsp_transport tcp … -r 2 -f image2pipe -c:v mjpeg`.
@@ -86,8 +86,12 @@ Stan (przygotowanie/druk/pauza/koniec/błąd), %, warstwa X/Y, pozostały czas +
 | GET | `/api/printers/{id}/thumbnail` | miniatura z `.3mf` |
 | GET | `/api/printers/{id}/camera` | MJPEG (`multipart/x-mixed-replace`); `camera: true` w opisie drukarki, gdy dostępna |
 | POST | `/api/printers/{id}/upload` | ręczny upload G-code / 3MF |
-| GET/POST/PUT/DELETE | `/api/config/printers…` | konfiguracja drukarek |
-| POST | `/api/discover` | wykrywanie SSDP |
+| GET | `/api/auth` | `{required, authenticated}` |
+| GET | `/api/config` | drukarki (bez Access Code, tylko `hasAccessCode`), `passwordSet`, ścieżka `BambuStudio.conf` |
+| POST/PUT/DELETE | `/api/config/printers[/{id}]` | dodanie / zmiana (pusty kod = bez zmiany) / usunięcie; zmiany od razu w monitorze |
+| GET | `/api/config/discovered` | drukarki wykryte przez SSDP + `configuredAs` |
+| POST | `/api/config/import-codes` | kody z `BambuStudio.conf` (wgrany plik albo lokalny) dla drukarek o pasującym numerze seryjnym |
+| PUT | `/api/config/password` | `{current, password}`; puste hasło = usunięcie |
 | POST | `/api/login`, `/api/logout` | sesja (gdy ustawione hasło) |
 
 Stany `geometry.state`: `none`, `loading`, `ready`, `missing` (brak plików na karcie → upload), `error`. Przy `missing`/`error` w trakcie wydruku serwer ponawia pobranie co 30 s (max 10 razy) — drukarka może jeszcze pobierać plik.
@@ -98,11 +102,14 @@ Frontend wbudowany przez `go:embed` (Vite buduje do `internal/webui/dist/`; bez 
 
 ## 6. Bezpieczeństwo
 - Praca w sieci lokalnej; dostęp zdalny przez własny VPN.
-- Jedno opcjonalne wspólne hasło (hash bcrypt, cookie sesyjne). Puste hasło = otwarty dostęp do wszystkiego, łącznie z konfiguracją.
+- Jedno opcjonalne wspólne hasło (hash bcrypt). Puste hasło = otwarty dostęp do wszystkiego, łącznie z konfiguracją.
+  - Sesja: ciasteczko `HttpOnly`, `SameSite=Strict`, ważne 30 dni, podpisane HMAC sekretem z `config.json`; zmiana hasła zmienia sekret (wylogowuje inne sesje, bieżąca dostaje nowe ciasteczko).
+  - Błędne hasło: odpowiedź opóźniona o 1 s.
+  - Zmiany (POST/PUT/DELETE) z nagłówkiem `Origin` innej strony są odrzucane; endpointy JSON wymagają `Content-Type: application/json` — bez hasła chroni to przed formularzami z obcych stron.
 - Access Code nigdy nie wraca do przeglądarki (pole `••••`, tylko nadpisanie).
 - **Źródło Access Code** (ekran A1 pokazuje go tylko w LAN Only Mode):
   - ręczne wpisanie, z podpowiedzią gdzie go znaleźć,
-  - **import z Bambu Studio**: serwer czyta `BambuStudio.conf` (klucz `access_code`: serial → kod) lokalnie, gdy działa na tym samym komputerze (`%APPDATA%\BambuStudio\` / `~/.config/BambuStudio/`), albo z pliku wgranego przez formularz; wgrany plik nie jest zapisywany.
+  - **import z Bambu Studio**: serwer czyta `BambuStudio.conf` (klucz `access_code`: serial → kod) lokalnie, gdy działa na tym samym komputerze (`%APPDATA%\BambuStudio\` / `~/.config/BambuStudio/` / `~/Library/Application Support/BambuStudio/`), albo z pliku wgranego przez formularz; wgrany plik nie jest zapisywany. Usługa działająca na koncie systemowym nie widzi pliku użytkownika — wtedy upload.
 
 ## 7. Dane
 Katalog danych: domyślnie `%ProgramData%\bblv` (Windows) / `/var/lib/bblv` (Linux), nadpisywany flagą `--data`.
@@ -129,6 +136,7 @@ recordings/     nagrania MQTT (.jsonl)
 
 ## 10. Budowa i wdrożenie
 - `CGO_ENABLED=0` — twarda zasada (cross-kompilacja jedną komendą).
+- Go 1.24 (`go.mod`); zależności dodawać z `GOTOOLCHAIN=local`, bo `go get …@latest` potrafi podnieść wymaganą wersję Go i pobrać nowszy toolchain.
 - `dist/` poza repo; skrypty `build.ps1` i `build.sh`: `npm ci && npm run build`, następnie `go build` dla `windows/amd64`, `linux/amd64`, `linux/arm64`.
 - `bblv service install|uninstall|start|stop` (`kardianos/service`): usługa Windows / systemd.
 - Testy w Go: parser G-code, scalanie stanu MQTT (na nagraniach z A1).
@@ -170,4 +178,5 @@ docs/                specyfikacja
 - ~~Rozdzielczość kamery A1~~ — 1536×1080, ~150 KB/klatkę, ~0,7 kl./s (pomiar bez trwającego wydruku).
 - A1 nie raportuje numeru linii G-code (`mc_print_line_number` = 0) — postęp wewnątrz warstwy pozostaje poza zakresem.
 - Dostępne języki w bazie HMS Bambu.
-- Ścieżka `BambuStudio.conf` na Linuxie/macOS.
+- Ścieżka `BambuStudio.conf` na Linuxie/macOS (przyjęta wg konwencji, niesprawdzona).
+- Kody modeli w SSDP poza `N2S` (A1) — wg dokumentacji społeczności.
