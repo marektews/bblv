@@ -21,6 +21,7 @@ func runRecord(args []string) error {
 	dataDir := fs.String("data", config.DefaultDataDir(), "data directory with config.json")
 	id := fs.String("printer", "", "printer id from config.json (optional when only one is configured)")
 	out := fs.String("out", "", "output file (default <data>/recordings/<id>-<time>.jsonl)")
+	raw := fs.Bool("raw", false, "keep serial numbers, spool ids and network addresses (do not share such files)")
 	fs.Parse(args)
 
 	cfg, err := config.Load(*dataDir)
@@ -38,7 +39,11 @@ func runRecord(args []string) error {
 		*out = filepath.Join(*dataDir, "recordings", fmt.Sprintf("%s-%s.jsonl", p.ID, time.Now().Format("20060102-150405")))
 	}
 
-	rec, err := recording.Create(*out, p.Model)
+	var san *recording.Sanitizer
+	if !*raw {
+		san = recording.NewSanitizer(p.Serial)
+	}
+	rec, err := recording.Create(*out, p.Model, san)
 	if err != nil {
 		return err
 	}

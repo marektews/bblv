@@ -6,13 +6,19 @@ import (
 	"os"
 )
 
+// version is set by the build scripts.
+var version = "dev"
+
 const usage = `Usage: bblv <command> [flags]
 
 Commands:
-  serve      run the web server
-  record     connect to a printer and record its MQTT reports to a .jsonl file
-  replay     play back a recording and log the printer status
-  geometry   build the 3D geometry of the current print (or of a local file)
+  serve       run the web server
+  service     install and control bblv as a system service
+  record      connect to a printer and record its MQTT reports to a .jsonl file
+  replay      play back a recording and log the printer status
+  anonymize   remove serial numbers and other identifiers from a recording
+  geometry    build the 3D geometry of the current print (or of a local file)
+  version     print the version
 
 Run "bblv <command> -h" for command flags.
 `
@@ -26,12 +32,18 @@ func main() {
 	switch os.Args[1] {
 	case "serve":
 		err = runServe(os.Args[2:])
+	case "service":
+		err = runServiceCommand(os.Args[2:])
 	case "record":
 		err = runRecord(os.Args[2:])
 	case "replay":
 		err = runReplay(os.Args[2:])
+	case "anonymize":
+		err = runAnonymize(os.Args[2:])
 	case "geometry":
 		err = runGeometry(os.Args[2:])
+	case "version":
+		fmt.Println("bblv", version)
 	case "-h", "--help", "help":
 		fmt.Print(usage)
 		return

@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/kardianos/service"
+
 	"github.com/marektews/bblv/internal/auth"
 	"github.com/marektews/bblv/internal/cache"
 	"github.com/marektews/bblv/internal/config"
@@ -23,31 +25,54 @@ import (
 	"github.com/marektews/bblv/internal/server"
 )
 
-func runServe(args []string) error {
-	fs := flag.NewFlagSet("serve", flag.ExitOnError)
-	dataDir := fs.String("data", config.DefaultDataDir(), "data directory")
-	listen := fs.String("listen", ":8080", "HTTP listen address")
-	replay := fs.String("replay", "", "serve a virtual printer replaying this recording instead of the configured printers")
-	replayModel := fs.String("replay-model", "", "with -replay: .gcode or .3mf file used as the geometry")
-	speed := fs.Float64("speed", 1, "with -replay: playback speed multiplier")
-	fs.Parse(args)
+type serveOptions struct {
+	dataDir     string
+	listen      string
+	replay      string
+	replayModel string
+	speed       float64
+}
 
-	store, err := cache.Open(filepath.Join(*dataDir, "cache"), cache.DefaultLimit)
+func parseServeFlags(args []string) serveOptions {
+	fs := flag.NewFlagSet("serve", flag.ExitOnError)
+	var o serveOptions
+	fs.StringVar(&o.dataDir, "data", config.DefaultDataDir(), "data directory")
+	fs.StringVar(&o.listen, "listen", ":8080", "HTTP listen address")
+	fs.StringVar(&o.replay, "replay", "", "serve a virtual printer replaying this recording instead of the configured printers")
+	fs.StringVar(&o.replayModel, "replay-model", "", "with -replay: .gcode or .3mf file used as the geometry")
+	fs.Float64Var(&o.speed, "speed", 1, "with -replay: playback speed multiplier")
+	fs.Parse(args)
+	return o
+}
+
+func runServe(args []string) error {
+	o := parseServeFlags(args)
+	if !service.Interactive() {
+		return runAsService(o)
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return serve(ctx, o)
+}
+
+// serve runs the web server until ctx is cancelled.
+func serve(ctx context.Context, o serveOptions) error {
+	store, err := cache.Open(filepath.Join(o.dataDir, "cache"), cache.DefaultLimit)
 	if err != nil {
 		return err
 	}
-	cfgStore, err := config.OpenStore(*dataDir)
+	cfgStore, err := config.OpenStore(o.dataDir)
 	if err != nil {
 		return err
 	}
 	ffmpeg, _ := exec.LookPath("ffmpeg")
 	mon := monitor.New(store, ffmpeg)
-	if *replay != "" {
-		if err := mon.AddReplay(*replay, *speed); err != nil {
+	if o.replay != "" {
+		if err := mon.AddReplay(o.replay, o.speed); err != nil {
 			return err
 		}
-		if *replayModel != "" {
-			res, err := printjob.BuildFile(*replayModel, 0, store)
+		if o.replayModel != "" {
+			res, err := printjob.BuildFile(o.replayModel, 0, store)
 			if err != nil {
 				return err
 			}
@@ -56,20 +81,20 @@ func runServe(args []string) error {
 	} else {
 		cfg := cfgStore.Get()
 		if len(cfg.Printers) == 0 {
-			slog.Warn("no printers configured", "config", filepath.Join(*dataDir, config.FileName))
+			slog.Warn("no printers configured, add them in the settings", "config", filepath.Join(o.dataDir, config.FileName))
 		}
 		for _, p := range cfg.Printers {
 			mon.AddPrinter(p)
 		}
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	go mon.Run(ctx)
 	disc := discovery.Listen(ctx)
 
 	srv := &http.Server{
-		Addr:              *listen,
+		Addr:              o.listen,
 		Handler:           server.New(server.Deps{Monitor: mon, Config: cfgStore, Auth: auth.New(cfgStore), Discovery: disc}),
 		ReadHeaderTimeout: 10 * time.Second,
 		// Cancels long-lived event streams on shutdown.
@@ -81,7 +106,7 @@ func runServe(args []string) error {
 		defer cancel()
 		srv.Shutdown(shutdown)
 	}()
-	slog.Info("listening", "addr", *listen)
+	slog.Info("listening", "addr", o.listen, "data", o.dataDir, "version", version)
 	if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
