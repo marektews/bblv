@@ -6,10 +6,8 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -33,15 +31,13 @@ type Client struct {
 	p       config.Printer
 	handler func(Report)
 	conn    mqtt.Client
-
-	mu    sync.Mutex
-	state map[string]any
+	state   *State
 }
 
 // New creates a client. handler is called for every report after it has been
 // merged into the state; calls are sequential and must not block for long.
 func New(p config.Printer, handler func(Report)) *Client {
-	c := &Client{p: p, handler: handler, state: map[string]any{}}
+	c := &Client{p: p, handler: handler, state: NewState()}
 	opts := mqtt.NewClientOptions().
 		AddBroker("ssl://" + p.Host + ":8883").
 		SetClientID("bblv-" + randomID()).
@@ -82,9 +78,7 @@ func (c *Client) Close() {
 
 // Status returns a typed snapshot of the current state.
 func (c *Client) Status() Status {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return statusFrom(c.state)
+	return c.state.Status()
 }
 
 func (c *Client) onConnect(conn mqtt.Client) {
@@ -104,13 +98,8 @@ func (c *Client) onConnect(conn mqtt.Client) {
 
 func (c *Client) onMessage(_ mqtt.Client, m mqtt.Message) {
 	r := Report{Time: time.Now(), Payload: m.Payload()}
-	var msg map[string]any
-	if err := json.Unmarshal(r.Payload, &msg); err != nil {
+	if err := c.state.Apply(r.Payload); err != nil {
 		slog.Warn("invalid report", "printer", c.p.ID, "err", err)
-	} else {
-		c.mu.Lock()
-		merge(c.state, msg)
-		c.mu.Unlock()
 	}
 	if c.handler != nil {
 		c.handler(r)

@@ -43,15 +43,22 @@ Drukarka pozostaje w **trybie chmurowym** — LAN Only Mode i Developer Mode **n
    - `<subtask>_plate_N.gcode` — gotowy G-code płyty (bez rozpakowywania `.3mf`),
    - `N_<subtask>.bbl` — JSON: numer płyty (prefiks nazwy), `file path` do `.3mf`, `md5`, `ams mapping` (indeks filamentu → slot AMS, `-1` = brak).
 
-   `subtask_name` z MQTT → odszukanie `.bbl` w `cache/` → pobranie `.gcode` i `.3mf`. Pole `file_size` w `.bbl` bywa nieaktualne — nie polegać na nim.
+   `subtask_name` z MQTT → odszukanie `.bbl` w `cache/` → pobranie **`.3mf`** (skompresowany, zawiera też `Metadata/plate_N.gcode`; ~5× mniejszy niż goły G-code) → gdy `.3mf` nie ma G-code lub się nie pobierze — goły `.gcode`. Pole `file_size` w `.bbl` bywa nieaktualne — nie polegać na nim.
 2. **Awaryjnie:** ręczny upload `.gcode` / `.3mf` przez stronę.
 
 ### Przetwarzanie (serwer, Go)
 - Parser G-code: warstwy, typy ścieżek (`; FEATURE:`), zmiany narzędzia (`T0…T3`), kolory filamentów z nagłówka (`filament_colour`), szerokość ekstruzji i wysokość warstwy.
 - Pomijanie ruchów jałowych (travel).
 - Upraszczanie: scalanie współliniowych odcinków.
-- Wynik: zwarty format binarny (`Float32` + indeksy kolorów/typów), podzielony na warstwy.
-- Cache na dysku, klucz = hash pliku, limit rozmiaru (domyślnie 1 GB, sprzątanie najstarszych).
+- Szerokość ścieżki z `; LINE_WIDTH:`, a gdy brak — z objętości wytłoczenia. Łuki G2/G3 linearyzowane (odchyłka ≤ 0,01 mm). Pod uwagę brane tylko ruchy między pierwszym `; CHANGE_LAYER` a `; MACHINE_END_GCODE_START`.
+- Wynik — format binarny (little endian):
+  ```
+  "BBLG" | uint32 wersja | uint32 n | n bajtów JSON (dopełnione spacjami do 4 B) | punkty
+  JSON:  {version, points, layers:[{z,height,first,count}], features:[nazwy], filaments:[#RRGGBB], bounds:[6]}
+  punkt: 7 × float32 = x, y, z, width, height, layer, tool*256+feature
+  ```
+  Punkty tworzą polilinie: odcinek kończący się w punkcie `i` ma atrybuty punktu `i`; `width = 0` oznacza „przejdź do” (bez odcinka). Na wydruku testowym: 197 tys. odcinków → 5,3 MB (gzip 1,2 MB), parsowanie 80 ms.
+- Cache na dysku, klucz = ścieżki + rozmiary + daty plików na karcie, limit rozmiaru (domyślnie 1 GB, LRU).
 
 ### Render (przeglądarka)
 - Czysty Three.js w komponencie Vue `<PrintViewer>`; scena i bufory poza reaktywnością (`markRaw`).
@@ -120,11 +127,12 @@ recordings/     nagrania MQTT (.jsonl)
 
 ## 11. Struktura kodu (propozycja)
 ```
-cmd/bblv/            main, komendy CLI (serve, service, record, replay)
+cmd/bblv/            main, komendy CLI (serve, service, record, replay, geometry)
 internal/printer/    klient MQTT, model stanu, scalanie raportów, profile modeli
-internal/ftps/       pobieranie plików z karty SD
+internal/ftps/       sesja FTPS z kartą SD
+internal/printjob/   wyszukanie plików wydruku na karcie, budowa geometrii i miniatury
 internal/gcode/      parser, upraszczanie, format binarny
-internal/cache/      cache geometrii i miniatur
+internal/cache/      cache geometrii i miniatur (LRU)
 internal/camera/     źródło JPEG:6000, źródło ffmpeg, fan-out MJPEG
 internal/discovery/  SSDP
 internal/config/     config.json

@@ -45,27 +45,12 @@ func runRecord(args []string) error {
 	defer rec.Close()
 
 	var client *printer.Client
-	var last printer.Status
+	var status statusLogger
 	client = printer.New(*p, func(r printer.Report) {
 		if err := rec.Write(r.Time, r.Payload); err != nil {
 			slog.Error("write recording", "err", err)
 		}
-		s := client.Status()
-		if s.Firmware != "" && s.Firmware != last.Firmware {
-			slog.Info("firmware", "version", s.Firmware)
-		}
-		if s.GcodeFile != last.GcodeFile || s.Subtask != last.Subtask {
-			slog.Info("print file", "gcode_file", s.GcodeFile, "subtask", s.Subtask)
-		}
-		if s.State != last.State || s.Stage != last.Stage || s.Layer != last.Layer || s.Percent != last.Percent || len(s.HMS) != len(last.HMS) {
-			slog.Info("status",
-				"state", s.State, "stage", s.Stage, "percent", s.Percent,
-				"layer", fmt.Sprintf("%d/%d", s.Layer, s.TotalLayers),
-				"nozzle", fmt.Sprintf("%.0f/%.0f", s.NozzleTemp, s.NozzleTarget),
-				"bed", fmt.Sprintf("%.0f/%.0f", s.BedTemp, s.BedTarget),
-				"remaining_min", s.RemainingMin, "hms", s.HMS)
-		}
-		last = s
+		status.log(client.Status())
 	})
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

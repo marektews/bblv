@@ -9,7 +9,9 @@ import (
 const usage = `Usage: bblv <command> [flags]
 
 Commands:
-  record   connect to a printer and record its MQTT reports to a .jsonl file
+  record     connect to a printer and record its MQTT reports to a .jsonl file
+  replay     play back a recording and log the printer status
+  geometry   build the 3D geometry of the current print (or of a local file)
 
 Run "bblv <command> -h" for command flags.
 `
@@ -23,6 +25,10 @@ func main() {
 	switch os.Args[1] {
 	case "record":
 		err = runRecord(os.Args[2:])
+	case "replay":
+		err = runReplay(os.Args[2:])
+	case "geometry":
+		err = runGeometry(os.Args[2:])
 	case "-h", "--help", "help":
 		fmt.Print(usage)
 		return
