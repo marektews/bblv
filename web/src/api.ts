@@ -134,6 +134,18 @@ export function uploadModel(id: string, file: File, plate = 0): Promise<PrinterI
   return request('POST', `${printerUrl(id)}/upload`, form)
 }
 
+export interface Alert {
+  kind: 'hms' | 'error'
+  code: string
+  severity?: string // fatal, serious, common or info for HMS alerts
+  text: string // "" when Bambu has no description
+  url: string // Bambu help link, redirects to the wiki
+}
+
+export function getAlerts(id: string, lang: string): Promise<Alert[]> {
+  return request('GET', `${printerUrl(id)}/alerts?lang=${encodeURIComponent(lang)}`)
+}
+
 export interface AuthStatus {
   required: boolean
   authenticated: boolean

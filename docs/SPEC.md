@@ -73,7 +73,12 @@ Drukarka pozostaje w **trybie chmurowym** — LAN Only Mode i Developer Mode **n
 ## 4. Panel parametrów
 Stan (przygotowanie/druk/pauza/koniec/błąd), %, warstwa X/Y, pozostały czas + godzina zakończenia, temperatury dyszy i stołu (aktualna/docelowa), nazwa pliku, profil prędkości, wentylatory, sloty AMS (kolor, typ, aktywny), bieżący etap, błędy HMS, sygnał Wi-Fi.
 
-**HMS:** snapshot bazy opisów Bambu wbudowany w binarkę (odświeżany skryptem przy budowie) + link do wiki Bambu. Brak polskiego opisu → angielski.
+**HMS:** snapshot bazy opisów Bambu wbudowany w binarkę + link do wiki Bambu. Brak polskiego opisu → angielski.
+- Źródło: `https://e.bambulab.com/query.php?lang={en|pl}&d={prefiks numeru seryjnego}` (to samo, czego używa Bambu Studio) → `device_hms` (kody 16 hex) i `device_error` (kody `print_error`, 8 hex). Odświeżanie: `go run ./internal/hms/gen` (18 zapytań, ~7 MB) → `internal/hms/data/hms_{en,pl}.json.gz` (~60–70 KB). Teksty różne dla modeli są zachowane per prefiks (A1 = `039`).
+- Link „więcej”: `https://e.bambulab.com/index.php?e={kod}&d={prefiks}&s=device_hms|device_error&lang=…` — przekierowuje na stronę kodu w wiki albo na przegląd HMS.
+- `GET /api/printers/{id}/alerts?lang=pl|en` → `[{kind, code, severity, text, url}]`; waga HMS z bitów kodu: 1 fatal, 2 serious, 3 common, 4 info.
+
+**Etapy (`stg_cur`):** nazwy PL/EN dla 78 numerów wg listy ha-bambulab (`web/src/locales/stages.ts`); 0 = drukowanie i -1/255 = bezczynna nie są pokazywane. Etap widoczny w panelu i na kafelku w trakcie wydruku.
 
 ## 5. Serwer HTTP / API (szkic)
 
@@ -154,7 +159,7 @@ internal/discovery/  SSDP
 internal/config/     config.json
 internal/auth/       hasło, sesje
 internal/recording/  nagrywanie / odtwarzanie
-internal/hms/        snapshot opisów HMS
+internal/hms/        opisy HMS i kodów błędów (gen/ = generator tabel)
 internal/server/     HTTP, SSE, routing, embed frontendu
 web/                 projekt Vue (Vite)
 docs/                specyfikacja
@@ -177,6 +182,6 @@ docs/                specyfikacja
 - ~~Wymagania FTPS~~ — ścieżki względne, PASV, cache sesji TLS włączony.
 - ~~Rozdzielczość kamery A1~~ — 1536×1080, ~150 KB/klatkę, ~0,7 kl./s (pomiar bez trwającego wydruku).
 - A1 nie raportuje numeru linii G-code (`mc_print_line_number` = 0) — postęp wewnątrz warstwy pozostaje poza zakresem.
-- Dostępne języki w bazie HMS Bambu.
+- ~~Dostępne języki w bazie HMS Bambu~~ — polski jest (prawdziwe tłumaczenia).
 - Ścieżka `BambuStudio.conf` na Linuxie/macOS (przyjęta wg konwencji, niesprawdzona).
 - Kody modeli w SSDP poza `N2S` (A1) — wg dokumentacji społeczności.

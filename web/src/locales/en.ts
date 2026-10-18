@@ -52,6 +52,7 @@ const en = {
     emptySlot: 'Empty',
     active: 'In use',
     alerts: 'Alerts',
+    moreInfo: 'More information',
     noAlerts: 'No alerts',
     printError: 'Error code',
     device: 'Device',

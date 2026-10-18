@@ -249,6 +249,14 @@ func (m *Monitor) Upload(id string, res *printjob.Result) error {
 	return nil
 }
 
+// Serial returns the serial number of a printer, "" when unknown.
+func (m *Monitor) Serial(id string) string {
+	if p := m.find(id); p != nil {
+		return p.cfg.Serial
+	}
+	return ""
+}
+
 // Camera returns the camera of a printer, nil when it has none.
 func (m *Monitor) Camera(id string) *camera.Hub {
 	if p := m.find(id); p != nil {

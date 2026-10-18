@@ -2,10 +2,12 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { EXTERNAL_TRAY, type PrinterInfo, type Tray } from '../api'
-import { ACTIVE_STATES, errorCode, useFormat } from '../format'
+import { ACTIVE_STATES, useFormat } from '../format'
+import { stageName } from '../locales/stages'
+import AlertList from './AlertList.vue'
 
 const props = defineProps<{ printer: PrinterInfo }>()
-const { t, te } = useI18n()
+const { t, te, locale } = useI18n()
 const { duration, finishAt, temp } = useFormat()
 
 const s = computed(() => props.printer.status)
@@ -13,8 +15,7 @@ const active = computed(() => props.printer.online && ACTIVE_STATES.includes(s.v
 // The A1 series has only the part cooling and hotend fans.
 const hasChamberFans = computed(() => !props.printer.model.toUpperCase().startsWith('A1'))
 const speed = computed(() => (te(`speed.${s.value.speedLevel}`) ? t(`speed.${s.value.speedLevel}`) : '—'))
-// Stage 0 is plain printing and 255 idle; other stages get names in a later step.
-const stage = computed(() => (s.value.stage > 0 && s.value.stage < 255 ? `#${s.value.stage}` : ''))
+const stage = computed(() => stageName(s.value.stage, locale.value))
 
 interface Slot {
   key: string
@@ -99,11 +100,7 @@ const slots = computed<Slot[]>(() => {
 
     <section>
       <h4>{{ t('status.alerts') }}</h4>
-      <div v-if="s.hms.length || s.printError" class="alerts">
-        <el-tag v-if="s.printError" type="danger">{{ t('status.printError') }} {{ errorCode(s.printError) }}</el-tag>
-        <el-tag v-for="code in s.hms" :key="code" type="warning">HMS {{ code }}</el-tag>
-      </div>
-      <div v-else class="muted">{{ t('status.noAlerts') }}</div>
+      <AlertList :printer="printer" />
     </section>
 
     <section>
@@ -171,9 +168,4 @@ h4 {
   font-size: 12px;
 }
 
-.alerts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
 </style>

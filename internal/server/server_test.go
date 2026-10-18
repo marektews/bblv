@@ -22,7 +22,7 @@ import (
 )
 
 const recordingFile = `{"t":"2026-10-18T20:00:00Z","kind":"meta","model":"A1"}
-{"t":"2026-10-18T20:00:01Z","kind":"report","payload":{"print":{"gcode_state":"RUNNING","subtask_name":"cube","layer_num":3}}}
+{"t":"2026-10-18T20:00:01Z","kind":"report","payload":{"print":{"gcode_state":"RUNNING","subtask_name":"cube","layer_num":3,"print_error":50348044,"hms":[{"attr":50331904,"code":65537}]}}}
 `
 
 const gcodeFile = "; CHANGE_LAYER\n; LAYER_HEIGHT: 0.2\n; LINE_WIDTH: 0.4\nG90\nM83\nG1 X0 Y0 Z0.2\nG1 X10 E1\n"
@@ -184,5 +184,20 @@ func TestFrontendPlaceholderAndUnknownAPI(t *testing.T) {
 	}
 	if code := getJSON(t, ts.URL+"/api/nope", nil); code != http.StatusNotFound {
 		t.Fatalf("unknown api: %d", code)
+	}
+}
+
+func TestAlerts(t *testing.T) {
+	ts := setup(t)
+	var alerts []struct{ Kind, Code, Severity, Text, URL string }
+	if code := getJSON(t, ts.URL+"/api/printers/replay/alerts?lang=pl", &alerts); code != 200 || len(alerts) != 2 {
+		t.Fatalf("alerts: %d %+v", code, alerts)
+	}
+	e, h := alerts[0], alerts[1]
+	if e.Kind != "error" || e.Code != "0300_400C" || !strings.Contains(e.URL, "s=device_error") {
+		t.Errorf("print error = %+v", e)
+	}
+	if h.Kind != "hms" || h.Code != "0300_0100_0001_0001" || h.Severity != "fatal" || h.Text == "" || !strings.Contains(h.URL, "lang=pl") {
+		t.Errorf("hms = %+v", h)
 	}
 }

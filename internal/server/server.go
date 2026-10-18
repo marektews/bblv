@@ -19,6 +19,7 @@ import (
 	"github.com/marektews/bblv/internal/auth"
 	"github.com/marektews/bblv/internal/config"
 	"github.com/marektews/bblv/internal/discovery"
+	"github.com/marektews/bblv/internal/hms"
 	"github.com/marektews/bblv/internal/monitor"
 	"github.com/marektews/bblv/internal/printjob"
 	"github.com/marektews/bblv/internal/webui"
@@ -60,6 +61,7 @@ func New(d Deps) http.Handler {
 	mux.HandleFunc("GET /api/printers/{id}/geometry", s.geometry)
 	mux.HandleFunc("GET /api/printers/{id}/thumbnail", s.thumbnail)
 	mux.HandleFunc("GET /api/printers/{id}/camera", s.camera)
+	mux.HandleFunc("GET /api/printers/{id}/alerts", s.alerts)
 	mux.HandleFunc("POST /api/printers/{id}/upload", s.upload)
 	mux.HandleFunc("GET /api/events", s.events)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
@@ -119,6 +121,40 @@ func (s *server) thumbnail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	serveFile(w, r, thumbnail, key+"-png", "image/png", false)
+}
+
+// alerts describes the current HMS alerts and print error of a printer in
+// the language given by ?lang= (Polish or English).
+func (s *server) alerts(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	info, ok := s.mon.Printer(id)
+	if !ok {
+		writeError(w, http.StatusNotFound, "unknown printer")
+		return
+	}
+	lang := r.URL.Query().Get("lang")
+	if lang != "pl" {
+		lang = "en"
+	}
+	serial := s.mon.Serial(id)
+	type alert struct {
+		Kind     string `json:"kind"`
+		Code     string `json:"code"`
+		Severity string `json:"severity,omitempty"`
+		Text     string `json:"text"`
+		URL      string `json:"url"`
+	}
+	out := []alert{}
+	if e := info.Status.PrintError; e != 0 {
+		code := fmt.Sprintf("%08X", uint32(e))
+		code = code[:4] + "_" + code[4:]
+		out = append(out, alert{Kind: hms.KindError, Code: code, Text: hms.Text(lang, serial, hms.KindError, code), URL: hms.HelpURL(lang, serial, hms.KindError, code)})
+	}
+	for _, h := range info.Status.HMS {
+		code := h.String()
+		out = append(out, alert{Kind: hms.KindHMS, Code: code, Severity: hms.Severity(h.Code), Text: hms.Text(lang, serial, hms.KindHMS, code), URL: hms.HelpURL(lang, serial, hms.KindHMS, code)})
+	}
+	writeJSON(w, out)
 }
 
 // camera streams the printer camera as MJPEG (multipart/x-mixed-replace),

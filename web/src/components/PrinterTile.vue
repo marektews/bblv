@@ -3,13 +3,15 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { thumbnailUrl, type PrinterInfo } from '../api'
 import { ACTIVE_STATES, useFormat } from '../format'
+import { stageName } from '../locales/stages'
 import StateTag from './StateTag.vue'
 
 const props = defineProps<{ printer: PrinterInfo }>()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const { duration } = useFormat()
 const status = computed(() => props.printer.status)
 const active = computed(() => props.printer.online && ACTIVE_STATES.includes(status.value.state))
+const stage = computed(() => (active.value ? stageName(status.value.stage, locale.value) : ''))
 </script>
 
 <template>
@@ -24,7 +26,10 @@ const active = computed(() => props.printer.online && ACTIVE_STATES.includes(sta
           <span class="model">{{ printer.model }}</span>
           <el-tag v-if="printer.experimental" type="warning" size="small">{{ t('printer.experimental') }}</el-tag>
         </div>
-        <StateTag :printer="printer" />
+        <div class="state">
+          <StateTag :printer="printer" />
+          <span v-if="stage" class="meta">{{ stage }}</span>
+        </div>
         <div v-if="status.subtask" class="file" :title="status.subtask">{{ status.subtask }}</div>
         <template v-if="active">
           <el-progress :percentage="status.percent" />
@@ -71,6 +76,12 @@ const active = computed(() => props.printer.online && ACTIVE_STATES.includes(sta
 
 .info .el-progress {
   width: 100%;
+}
+
+.state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .title {

@@ -54,6 +54,7 @@ const pl: Messages = {
     emptySlot: 'Pusty',
     active: 'W użyciu',
     alerts: 'Alerty',
+    moreInfo: 'Więcej informacji',
     noAlerts: 'Brak alertów',
     printError: 'Kod błędu',
     device: 'Urządzenie',
