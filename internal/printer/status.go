@@ -7,29 +7,35 @@ import (
 
 // Status is a typed view of the fields of the merged printer state used by the UI.
 type Status struct {
-	State        string // gcode_state: IDLE, PREPARE, RUNNING, PAUSE, FINISH, FAILED
-	Stage        int    // stg_cur
-	Percent      int
-	RemainingMin int
-	Layer        int
-	TotalLayers  int
-	NozzleTemp   float64
-	NozzleTarget float64
-	BedTemp      float64
-	BedTarget    float64
-	GcodeFile    string
-	Subtask      string
-	SpeedLevel   int
-	WifiSignal   string
-	PrintError   int
-	HMS          []HMS
-	Firmware     string
+	State        string  `json:"state"` // gcode_state: IDLE, PREPARE, RUNNING, PAUSE, FINISH, FAILED
+	Stage        int     `json:"stage"` // stg_cur
+	Percent      int     `json:"percent"`
+	RemainingMin int     `json:"remainingMin"`
+	Layer        int     `json:"layer"`
+	TotalLayers  int     `json:"totalLayers"`
+	NozzleTemp   float64 `json:"nozzleTemp"`
+	NozzleTarget float64 `json:"nozzleTarget"`
+	BedTemp      float64 `json:"bedTemp"`
+	BedTarget    float64 `json:"bedTarget"`
+	GcodeFile    string  `json:"gcodeFile"`
+	Subtask      string  `json:"subtask"`
+	TaskID       string  `json:"taskId"`
+	SpeedLevel   int     `json:"speedLevel"`
+	WifiSignal   string  `json:"wifiSignal"`
+	PrintError   int     `json:"printError"`
+	HMS          []HMS   `json:"hms"`
+	Firmware     string  `json:"firmware"`
 }
 
 // HMS is a single Health Management System entry reported by the printer.
 type HMS struct {
 	Attr uint32
 	Code uint32
+}
+
+// MarshalJSON encodes the entry as its code string.
+func (h HMS) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + h.String() + `"`), nil
 }
 
 // String formats the entry the way Bambu documents it, e.g. 0300_0100_0001_0007.
@@ -52,9 +58,11 @@ func statusFrom(state map[string]any) Status {
 		BedTarget:    num(p, "bed_target_temper"),
 		GcodeFile:    str(p, "gcode_file"),
 		Subtask:      str(p, "subtask_name"),
+		TaskID:       str(p, "task_id"),
 		SpeedLevel:   int(num(p, "spd_lvl")),
 		WifiSignal:   str(p, "wifi_signal"),
 		PrintError:   int(num(p, "print_error")),
+		HMS:          []HMS{},
 	}
 	if list, ok := p["hms"].([]any); ok {
 		for _, it := range list {

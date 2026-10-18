@@ -9,6 +9,7 @@ import (
 const usage = `Usage: bblv <command> [flags]
 
 Commands:
+  serve      run the web server
   record     connect to a printer and record its MQTT reports to a .jsonl file
   replay     play back a recording and log the printer status
   geometry   build the 3D geometry of the current print (or of a local file)
@@ -23,6 +24,8 @@ func main() {
 	}
 	var err error
 	switch os.Args[1] {
+	case "serve":
+		err = runServe(os.Args[2:])
 	case "record":
 		err = runRecord(os.Args[2:])
 	case "replay":

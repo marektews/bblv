@@ -4,6 +4,8 @@ package printjob
 
 import (
 	"archive/zip"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -119,6 +121,7 @@ func plateOf(name, prefix string) (int, bool) {
 
 // Result points to the cached files of a print.
 type Result struct {
+	Key       string       // cache key; changes whenever the geometry changes
 	Geometry  string       // encoded geometry
 	Thumbnail string       // plate thumbnail (PNG), "" when unavailable
 	Model     *gcode.Model // nil when the geometry came from the cache
@@ -129,9 +132,8 @@ type Result struct {
 // the plain G-code is the fallback.
 func Build(c *ftps.Conn, f *Files, store *cache.Cache) (*Result, error) {
 	key := cache.Key(f.ThreeMF, f.Gcode, strconv.Itoa(f.Plate), f.stamp)
-	if p, ok := store.Get(key, ".bin"); ok {
-		thumb, _ := store.Get(key, ".png")
-		return &Result{Geometry: p, Thumbnail: thumb}, nil
+	if r, ok := cached(store, key); ok {
+		return r, nil
 	}
 
 	var model *gcode.Model
@@ -157,8 +159,44 @@ func Build(c *ftps.Conn, f *Files, store *cache.Cache) (*Result, error) {
 	if model == nil {
 		return nil, errors.Join(errs...)
 	}
+	return save(store, key, model, png)
+}
 
-	r := &Result{Model: model}
+// BuildFile returns cached geometry for a local (e.g. uploaded) .gcode or
+// .3mf file, creating it when needed.
+func BuildFile(name string, plate int, store *cache.Cache) (*Result, error) {
+	f, err := os.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	h := sha256.New()
+	_, err = io.Copy(h, f)
+	f.Close()
+	if err != nil {
+		return nil, err
+	}
+	key := cache.Key("file", hex.EncodeToString(h.Sum(nil)), strconv.Itoa(plate))
+	if r, ok := cached(store, key); ok {
+		return r, nil
+	}
+	model, png, err := ParseFile(name, plate)
+	if err != nil {
+		return nil, err
+	}
+	return save(store, key, model, png)
+}
+
+func cached(store *cache.Cache, key string) (*Result, bool) {
+	p, ok := store.Get(key, ".bin")
+	if !ok {
+		return nil, false
+	}
+	thumb, _ := store.Get(key, ".png")
+	return &Result{Key: key, Geometry: p, Thumbnail: thumb}, true
+}
+
+func save(store *cache.Cache, key string, model *gcode.Model, png []byte) (*Result, error) {
+	r := &Result{Key: key, Model: model}
 	var err error
 	if r.Geometry, err = store.Put(key, ".bin", model.Encode); err != nil {
 		return nil, err

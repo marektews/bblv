@@ -28,10 +28,11 @@ type Report struct {
 
 // Client keeps an MQTT connection to one printer and the state merged from its reports.
 type Client struct {
-	p       config.Printer
-	handler func(Report)
-	conn    mqtt.Client
-	state   *State
+	p            config.Printer
+	handler      func(Report)
+	onConnection func(connected bool)
+	conn         mqtt.Client
+	state        *State
 }
 
 // New creates a client. handler is called for every report after it has been
@@ -52,9 +53,18 @@ func New(p config.Printer, handler func(Report)) *Client {
 		SetOnConnectHandler(c.onConnect).
 		SetConnectionLostHandler(func(_ mqtt.Client, err error) {
 			slog.Warn("printer connection lost", "printer", p.ID, "err", err)
+			if c.onConnection != nil {
+				c.onConnection(false)
+			}
 		})
 	c.conn = mqtt.NewClient(opts)
 	return c
+}
+
+// OnConnection sets a function called when the connection is established or
+// lost. It must be set before Connect.
+func (c *Client) OnConnection(f func(connected bool)) {
+	c.onConnection = f
 }
 
 // Connect establishes the first connection. Later drops are reconnected automatically.
@@ -83,6 +93,9 @@ func (c *Client) Status() Status {
 
 func (c *Client) onConnect(conn mqtt.Client) {
 	slog.Info("printer connected", "printer", c.p.ID, "host", c.p.Host)
+	if c.onConnection != nil {
+		c.onConnection(true)
+	}
 	report := "device/" + c.p.Serial + "/report"
 	if t := conn.Subscribe(report, 0, c.onMessage); !t.WaitTimeout(10*time.Second) || t.Error() != nil {
 		slog.Error("subscribe failed", "printer", c.p.ID, "err", t.Error())

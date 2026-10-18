@@ -80,8 +80,8 @@ Stan (przygotowanie/druk/pauza/koniec/błąd), %, warstwa X/Y, pozostały czas +
 |---|---|---|
 | GET | `/api/printers` | lista drukarek + skrócony stan |
 | GET | `/api/printers/{id}/state` | pełny stan |
-| GET | `/api/events` | SSE: stan, zmiana warstwy, nowy plik (przeładuj geometrię) |
-| GET | `/api/printers/{id}/geometry` | geometria binarna (z cache) |
+| GET | `/api/events` | SSE: zdarzenie `printer` z pełnym opisem drukarki (`id`, `name`, `model`, `experimental`, `online`, `status`, `geometry`) — po połączeniu dla każdej drukarki, potem przy każdej zmianie; nowy `geometry.key` = przeładuj geometrię |
+| GET | `/api/printers/{id}/geometry` | geometria binarna (z cache), gzip, `ETag` = `geometry.key` |
 | GET | `/api/printers/{id}/thumbnail` | miniatura z `.3mf` |
 | GET | `/api/printers/{id}/camera` | MJPEG (`multipart/x-mixed-replace`) |
 | POST | `/api/printers/{id}/upload` | ręczny upload G-code / 3MF |
@@ -89,7 +89,11 @@ Stan (przygotowanie/druk/pauza/koniec/błąd), %, warstwa X/Y, pozostały czas +
 | POST | `/api/discover` | wykrywanie SSDP |
 | POST | `/api/login`, `/api/logout` | sesja (gdy ustawione hasło) |
 
-Frontend wbudowany przez `go:embed`. W trybie dev serwer Vite proxy'uje `/api` do Go.
+Stany `geometry.state`: `none`, `loading`, `ready`, `missing` (brak plików na karcie → upload), `error`. Przy `missing`/`error` w trakcie wydruku serwer ponawia pobranie co 30 s (max 10 razy) — drukarka może jeszcze pobierać plik.
+
+Frontend wbudowany przez `go:embed` (Vite buduje do `internal/webui/dist/`; bez zbudowanego frontendu serwer pokazuje stronę zastępczą). W trybie dev serwer Vite proxy'uje `/api` do Go.
+
+`bblv serve -replay nagranie.jsonl [-replay-model plik.3mf] [-speed N]` — wirtualna drukarka `replay` z nagrania, do pracy nad frontendem bez drukarki.
 
 ## 6. Bezpieczeństwo
 - Praca w sieci lokalnej; dostęp zdalny przez własny VPN.
