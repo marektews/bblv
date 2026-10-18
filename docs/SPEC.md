@@ -117,7 +117,10 @@ recordings/     nagrania MQTT (.jsonl)
 - Cel: rozwój bez drukarki, testy automatyczne, diagnoza modeli „eksperymentalnych” z nagrań od innych.
 
 ## 9. Frontend
-- Vue 3 + Element Plus + TypeScript + Vite.
+- Vue 3 + Element Plus + TypeScript + Vite (projekt w `web/`, build do `internal/webui/dist/`).
+  - TypeScript 6.x — TS 7 (natywny, w Go) nie ma API JS, którego wymaga `vue-tsc`.
+  - Element Plus importowany w całości (~350 KB JS po gzip); serwer wysyła pliki tekstowe skompresowane gzip.
+  - Paczki npm instalowane z `--before` (wersje co najmniej 2 tygodnie po publikacji).
 - i18n PL/EN (`vue-i18n` + lokalizacje Element Plus), język wg przeglądarki + przełącznik.
 - Motyw jasny/ciemny wg systemu.
 - Responsywny pulpit i widok szczegółowy (telefon); konfiguracja dopracowana pod komputer.

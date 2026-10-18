@@ -111,6 +111,12 @@ func (s *server) upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := printjob.BuildFile(tmp.Name(), plate, s.mon.Store())
+	if pe := (*printjob.PlateError)(nil); errors.As(err, &pe) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		json.NewEncoder(w).Encode(map[string]any{"error": err.Error(), "code": "plate_required", "plates": pe.Plates})
+		return
+	}
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return

@@ -13,6 +13,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -25,6 +26,15 @@ import (
 
 // ErrNotFound means the SD card holds no files for the print.
 var ErrNotFound = errors.New("print files not found on the SD card")
+
+// PlateError means a .3mf holds several sliced plates and one must be chosen.
+type PlateError struct {
+	Plates []int
+}
+
+func (e *PlateError) Error() string {
+	return fmt.Sprintf("3mf has %d sliced plates, choose one of %v", len(e.Plates), e.Plates)
+}
 
 // Files are the SD card files of one print. For prints sent from Bambu Studio
 // or the cloud the printer keeps in cache/:
@@ -270,8 +280,13 @@ func parse3MF(zr *zip.Reader, plate int) (*gcode.Model, []byte, error) {
 				plates = append(plates, n)
 			}
 		}
-		if len(plates) != 1 {
-			return nil, nil, fmt.Errorf("3mf has %d sliced plates, choose one", len(plates))
+		switch len(plates) {
+		case 0:
+			return nil, nil, errors.New("3mf has no sliced G-code; in Bambu Studio export it with File > Export > Export plate sliced file")
+		case 1:
+		default:
+			sort.Ints(plates)
+			return nil, nil, &PlateError{Plates: plates}
 		}
 		plate = plates[0]
 	}

@@ -2,6 +2,7 @@ package printer
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 )
 
@@ -25,6 +26,33 @@ type Status struct {
 	PrintError   int     `json:"printError"`
 	HMS          []HMS   `json:"hms"`
 	Firmware     string  `json:"firmware"`
+	Fans         Fans    `json:"fans"`
+	AMS          []AMS   `json:"ams"`
+	ActiveTray   int     `json:"activeTray"` // unit*4+slot, 254 = external spool, -1 = none
+	External     *Tray   `json:"external"`
+}
+
+// Fans holds fan speeds in percent.
+type Fans struct {
+	Part      int `json:"part"`
+	Aux       int `json:"aux"`
+	Chamber   int `json:"chamber"`
+	Heatbreak int `json:"heatbreak"`
+}
+
+// AMS is one AMS unit.
+type AMS struct {
+	ID    int    `json:"id"`
+	Trays []Tray `json:"trays"`
+}
+
+// Tray is one filament slot; Type is empty for an empty slot.
+type Tray struct {
+	ID     int    `json:"id"`
+	Type   string `json:"type"`
+	Name   string `json:"name"`
+	Color  string `json:"color"`  // #RRGGBB
+	Remain int    `json:"remain"` // percent, -1 when unknown
 }
 
 // HMS is a single Health Management System entry reported by the printer.
@@ -71,6 +99,38 @@ func statusFrom(state map[string]any) Status {
 			}
 		}
 	}
+	// Fan speeds are reported as levels 0-15.
+	fan := func(key string) int { return int(math.Round(num(p, key) / 15 * 100)) }
+	s.Fans = Fans{Part: fan("cooling_fan_speed"), Aux: fan("big_fan1_speed"), Chamber: fan("big_fan2_speed"), Heatbreak: fan("heatbreak_fan_speed")}
+
+	ams := obj(p, "ams")
+	s.ActiveTray = -1
+	if now, err := strconv.Atoi(str(ams, "tray_now")); err == nil && now != 255 {
+		s.ActiveTray = now
+	}
+	s.AMS = []AMS{}
+	if units, ok := ams["ams"].([]any); ok {
+		for _, it := range units {
+			u, ok := it.(map[string]any)
+			if !ok {
+				continue
+			}
+			unit := AMS{ID: int(num(u, "id")), Trays: []Tray{}}
+			if trays, ok := u["tray"].([]any); ok {
+				for _, t := range trays {
+					if t, ok := t.(map[string]any); ok {
+						unit.Trays = append(unit.Trays, trayFrom(t))
+					}
+				}
+			}
+			s.AMS = append(s.AMS, unit)
+		}
+	}
+	if vt := obj(p, "vt_tray"); vt != nil {
+		t := trayFrom(vt)
+		s.External = &t
+	}
+
 	if mods, ok := obj(state, "info")["module"].([]any); ok {
 		for _, it := range mods {
 			if m, ok := it.(map[string]any); ok && str(m, "name") == "ota" {
@@ -79,6 +139,18 @@ func statusFrom(state map[string]any) Status {
 		}
 	}
 	return s
+}
+
+func trayFrom(t map[string]any) Tray {
+	tray := Tray{ID: int(num(t, "id")), Type: str(t, "tray_type"), Name: str(t, "tray_sub_brands"), Remain: -1}
+	if c := str(t, "tray_color"); len(c) >= 6 {
+		tray.Color = "#" + c[:6]
+	}
+	// Only spools identified by RFID (tray_id_name set) report a meaningful remain.
+	if r, ok := t["remain"].(float64); ok && r >= 0 && str(t, "tray_id_name") != "" {
+		tray.Remain = int(r)
+	}
+	return tray
 }
 
 // merge deep-merges src into dst. Objects are merged key by key; any other

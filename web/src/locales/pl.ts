@@ -1,0 +1,83 @@
+import type { Messages } from './en'
+
+const pl: Messages = {
+  app: {
+    disconnected: 'Brak połączenia z serwerem',
+  },
+  dashboard: {
+    empty: 'Brak skonfigurowanych drukarek',
+  },
+  printer: {
+    back: 'Wszystkie drukarki',
+    experimental: 'Eksperymentalne',
+    experimentalHint: 'Obsługa tego modelu opiera się na dokumentacji społeczności i nie była testowana.',
+    notFound: 'Nieznana drukarka',
+  },
+  state: {
+    IDLE: 'Bezczynna',
+    PREPARE: 'Przygotowanie',
+    RUNNING: 'Drukuje',
+    PAUSE: 'Pauza',
+    FINISH: 'Zakończono',
+    FAILED: 'Błąd',
+    OFFLINE: 'Offline',
+    unknown: 'Nieznany',
+  },
+  status: {
+    progress: 'Postęp',
+    layer: 'Warstwa',
+    remaining: 'Pozostało',
+    finishAt: 'Koniec ok.',
+    temperatures: 'Temperatury',
+    nozzle: 'Dysza',
+    bed: 'Stół',
+    print: 'Wydruk',
+    file: 'Plik',
+    plate: 'Płyta',
+    speed: 'Prędkość',
+    stage: 'Etap',
+    fans: 'Wentylatory',
+    fanPart: 'Chłodzenie wydruku',
+    fanAux: 'Pomocniczy',
+    fanChamber: 'Komora',
+    fanHeatbreak: 'Hotend',
+    filaments: 'Filamenty',
+    external: 'Szpula zewnętrzna',
+    emptySlot: 'Pusty',
+    active: 'W użyciu',
+    alerts: 'Alerty',
+    noAlerts: 'Brak alertów',
+    printError: 'Kod błędu',
+    device: 'Urządzenie',
+    wifi: 'Wi-Fi',
+    firmware: 'Firmware',
+  },
+  speed: {
+    1: 'Cichy',
+    2: 'Standardowy',
+    3: 'Sport',
+    4: 'Ludicrous',
+  },
+  geometry: {
+    none: 'Brak wydruku',
+    loading: 'Pobieranie modelu z drukarki…',
+    missing: 'Nie znaleziono pliku wydruku na karcie SD. Wgraj plik .gcode lub .3mf.',
+    error: 'Nie udało się pobrać modelu: {msg}',
+    uploaded: 'Model wgrany ręcznie',
+    upload: 'Wgraj model',
+    uploadDone: 'Model wgrany',
+    uploadFailed: 'Nie udało się wgrać pliku: {msg}',
+    choosePlate: 'Plik zawiera kilka płyt ({plates}). Która jest drukowana?',
+    plateTitle: 'Wybierz płytę',
+    plateInvalid: 'Podaj jeden z podanych numerów płyt',
+  },
+  viewer: {
+    placeholder: 'Widok 3D',
+  },
+  format: {
+    minutes: '{m} min',
+    hoursMinutes: '{h} godz. {m} min',
+  },
+}
+
+export default pl
