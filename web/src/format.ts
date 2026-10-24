@@ -1,4 +1,5 @@
 import { useI18n } from 'vue-i18n'
+import { EXTERNAL_TRAY, type Status, type Tray } from './api'
 
 export function useFormat() {
   const { t, locale } = useI18n()
@@ -28,6 +29,20 @@ export function useFormat() {
 export function errorCode(code: number): string {
   const hex = code.toString(16).toUpperCase().padStart(8, '0')
   return `${hex.slice(0, 4)}_${hex.slice(4)}`
+}
+
+// slotLabel names an AMS slot (unit*4+slot) like the printer screen: 1-4, or A1-D4 with several units.
+export function slotLabel(index: number, units: number): string {
+  const n = (index % 4) + 1
+  return units > 1 ? `${String.fromCharCode(65 + Math.floor(index / 4))}${n}` : `${n}`
+}
+
+// trayAt returns the spool in an AMS slot, or the external spool for EXTERNAL_TRAY.
+export function trayAt(s: Status, index: number): Tray | undefined {
+  if (index === EXTERNAL_TRAY) {
+    return s.external ?? undefined
+  }
+  return s.ams.find((u) => u.id === Math.floor(index / 4))?.trays.find((t) => t.id === index % 4)
 }
 
 export const ACTIVE_STATES = ['PREPARE', 'RUNNING', 'PAUSE']

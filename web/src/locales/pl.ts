@@ -86,6 +86,7 @@ const pl: Messages = {
     live: 'Wróć na żywo',
     byFilament: 'Filamenty',
     byFeature: 'Typy ścieżek',
+    slot: 'slot {slot}',
     linesMode: 'Uproszczony widok (linie) dla dużego wydruku',
   },
   camera: {

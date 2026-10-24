@@ -68,6 +68,7 @@ Drukarka pozostaje w **trybie chmurowym** — LAN Only Mode i Developer Mode **n
 - Warstwy wydrukowane: pełne; bieżąca: wyróżniona (w całości jako „w trakcie”); pozostałe: półprzezroczysty „duch”.
 - Suwak warstw: tryb „na żywo” (podąża za wydrukiem) i ręczny, przycisk „wróć na żywo”.
 - Kolorowanie: domyślnie kolory filamentów, przełącznik na typy ścieżek.
+- Legenda filamentów: kolor ze slicera, slot AMS z `ams mapping` w pliku `.bbl` (np. „Filament 1 → slot 4 · PETG”; `-1` = brak przypisania, `254` = szpula zewnętrzna) i podświetlenie filamentu drukowanego teraz (`ams.tray_now` z raportu = slot z mapowania). Bez pliku `.bbl` (upload, replay) legenda pokazuje same filamenty.
 - Po zakończeniu wydruku widok zostaje na ostatnim wydruku do startu następnego.
 
 ## 4. Panel parametrów

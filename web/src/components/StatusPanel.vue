@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { EXTERNAL_TRAY, type PrinterInfo, type Tray } from '../api'
-import { ACTIVE_STATES, useFormat } from '../format'
+import { ACTIVE_STATES, slotLabel, useFormat } from '../format'
 import { stageName } from '../locales/stages'
 import AlertList from './AlertList.vue'
 
@@ -29,7 +29,7 @@ const slots = computed<Slot[]>(() => {
   for (const unit of s.value.ams) {
     for (const tray of unit.trays) {
       const index = unit.id * 4 + tray.id
-      const label = s.value.ams.length > 1 ? `${String.fromCharCode(65 + unit.id)}${tray.id + 1}` : `${tray.id + 1}`
+      const label = slotLabel(index, s.value.ams.length)
       out.push({ key: `ams-${index}`, label, tray, active: s.value.activeTray === index })
     }
   }

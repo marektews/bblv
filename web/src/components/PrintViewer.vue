@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, markRaw, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { geometryUrl, type PrinterInfo } from '../api'
+import { EXTERNAL_TRAY, geometryUrl, type PrinterInfo } from '../api'
+import { ACTIVE_STATES, slotLabel, trayAt } from '../format'
 import type { Locale } from '../i18n'
 import { featureColor, featureLabel } from '../viewer/features'
 import { loadGeometry, type LoadedGeometry } from '../viewer/geometry'
@@ -33,15 +34,41 @@ const shownLayer = computed(() => (manual.value ? manualLayer.value : liveLayer.
 // 0-based layer index for the scene; outside a print everything is shown printed, without a highlight.
 const sceneLayer = computed(() => (!manual.value && !printing.value ? total.value : shownLayer.value - 1))
 
-const legend = computed(() => {
+interface LegendItem {
+  key: string
+  color: string
+  label: string
+  detail?: string // where a filament comes from, e.g. "slot 4 · PETG"
+  active?: boolean // the filament being printed now
+}
+
+const legend = computed<LegendItem[]>(() => {
   const g = geometry.value
   if (!g) {
     return []
   }
   if (colorMode.value === 'feature') {
-    return g.features.map((f) => ({ color: featureColor(g.meta.features[f]), label: featureLabel(g.meta.features[f], locale.value as Locale) }))
+    return g.features.map((f) => ({
+      key: `f${f}`,
+      color: featureColor(g.meta.features[f]),
+      label: featureLabel(g.meta.features[f], locale.value as Locale),
+    }))
   }
-  return g.tools.map((tool) => ({ color: g.meta.filaments[tool] ?? '#808080', label: `${t('viewer.filament')} ${tool + 1}` }))
+  // The .bbl file on the SD card maps filaments to AMS slots; reports name the slot in use.
+  const s = props.printer.status
+  const mapping = props.printer.geometry.amsMapping ?? []
+  const live = props.printer.online && ACTIVE_STATES.includes(s.state)
+  return g.tools.map((tool) => {
+    const item: LegendItem = { key: `t${tool}`, color: g.meta.filaments[tool] ?? '#808080', label: `${t('viewer.filament')} ${tool + 1}` }
+    const slot = mapping[tool] ?? -1
+    if (slot >= 0) {
+      const tray = trayAt(s, slot)
+      const where = slot === EXTERNAL_TRAY ? t('status.external') : t('viewer.slot', { slot: slotLabel(slot, s.ams.length) })
+      item.detail = [where, tray?.name || tray?.type].filter(Boolean).join(' · ')
+      item.active = live && s.activeTray === slot
+    }
+    return item
+  })
 })
 
 // Build plate size in mm by model.
@@ -134,8 +161,15 @@ watch(colorMode, (m) => scene?.setColorMode(m))
         <span v-if="lines" class="muted">{{ t('viewer.linesMode') }}</span>
       </div>
       <div class="legend">
-        <span v-for="item in legend" :key="item.label" class="legend-item">
+        <span
+          v-for="item in legend"
+          :key="item.key"
+          class="legend-item"
+          :class="{ active: item.active }"
+          :title="item.active ? t('status.active') : ''"
+        >
           <span class="swatch" :style="{ background: item.color }" />{{ item.label }}
+          <span v-if="item.detail" class="detail">→ {{ item.detail }}</span>
         </span>
       </div>
     </div>
@@ -214,6 +248,19 @@ watch(colorMode, (m) => scene?.setColorMode(m))
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+.legend-item .detail {
+  color: var(--el-text-color-secondary);
+}
+
+.legend-item.active {
+  font-weight: 600;
+  color: var(--el-color-primary);
+}
+
+.legend-item.active .swatch {
+  box-shadow: 0 0 0 2px var(--el-color-primary);
 }
 
 .swatch {

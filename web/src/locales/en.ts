@@ -84,6 +84,7 @@ const en = {
     live: 'Back to live',
     byFilament: 'Filaments',
     byFeature: 'Path types',
+    slot: 'slot {slot}',
     linesMode: 'Simplified view (lines) for a large print',
   },
   camera: {
