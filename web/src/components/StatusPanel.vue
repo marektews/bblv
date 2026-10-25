@@ -22,20 +22,31 @@ interface Slot {
   label: string
   tray: Tray
   active: boolean
+  filaments: string // the print's filaments fed from this slot, e.g. "1, 3"
 }
 
 const slots = computed<Slot[]>(() => {
+  // Same mapping as the 3D legend: filament i of the print comes from slot mapping[i].
+  const mapping = props.printer.geometry.amsMapping ?? []
+  const filaments = (index: number) =>
+    mapping.flatMap((slot, tool) => (slot === index ? [tool + 1] : [])).join(', ')
   const out: Slot[] = []
   for (const unit of s.value.ams) {
     for (const tray of unit.trays) {
       const index = unit.id * 4 + tray.id
       const label = slotLabel(index, s.value.ams.length)
-      out.push({ key: `ams-${index}`, label, tray, active: s.value.activeTray === index })
+      out.push({ key: `ams-${index}`, label, tray, active: s.value.activeTray === index, filaments: filaments(index) })
     }
   }
   const ext = s.value.external
   if (ext && ext.type) {
-    out.push({ key: 'external', label: t('status.external'), tray: ext, active: s.value.activeTray === EXTERNAL_TRAY })
+    out.push({
+      key: 'external',
+      label: t('status.external'),
+      tray: ext,
+      active: s.value.activeTray === EXTERNAL_TRAY,
+      filaments: filaments(EXTERNAL_TRAY),
+    })
   }
   return out
 })
@@ -94,6 +105,7 @@ const slots = computed<Slot[]>(() => {
             <div v-if="slot.tray.name" class="muted">{{ slot.tray.name }}</div>
             <div v-if="slot.tray.remain >= 0" class="muted">{{ slot.tray.remain }}%</div>
           </div>
+          <div v-if="slot.filaments" class="slot-use">→ {{ t('viewer.filament') }} {{ slot.filaments }}</div>
         </div>
       </div>
     </section>
@@ -139,7 +151,8 @@ h4 {
 
 .slot {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 4px 8px;
   padding: 8px;
   border: 1px solid var(--el-border-color-light);
   border-radius: 6px;
@@ -159,8 +172,21 @@ h4 {
   border: 1px solid var(--el-border-color);
 }
 
+/* Zero basis keeps long names next to the swatch instead of wrapping below it. */
+.slot-text {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .slot-label {
   font-weight: 600;
+}
+
+/* Own row across the tile: the text column next to the swatch is too narrow. */
+.slot-use {
+  flex-basis: 100%;
+  font-weight: 600;
+  color: var(--el-color-primary);
 }
 
 .muted {

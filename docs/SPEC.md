@@ -72,7 +72,7 @@ Drukarka pozostaje w **trybie chmurowym** — LAN Only Mode i Developer Mode **n
 - Po zakończeniu wydruku widok zostaje na ostatnim wydruku do startu następnego.
 
 ## 4. Panel parametrów
-Stan (przygotowanie/druk/pauza/koniec/błąd), %, warstwa X/Y, pozostały czas + godzina zakończenia, temperatury dyszy i stołu (aktualna/docelowa), nazwa pliku, profil prędkości, wentylatory, sloty AMS (kolor, typ, aktywny), bieżący etap, błędy HMS, sygnał Wi-Fi.
+Stan (przygotowanie/druk/pauza/koniec/błąd), %, warstwa X/Y, pozostały czas + godzina zakończenia, temperatury dyszy i stołu (aktualna/docelowa), nazwa pliku, profil prędkości, wentylatory, sloty AMS (kolor, typ, aktywny, który filament wydruku jest z danego slotu — to samo mapowanie co w legendzie 3D), bieżący etap, błędy HMS, sygnał Wi-Fi.
 
 **HMS:** snapshot bazy opisów Bambu wbudowany w binarkę + link do wiki Bambu. Brak polskiego opisu → angielski.
 - Źródło: `https://e.bambulab.com/query.php?lang={en|pl}&d={prefiks numeru seryjnego}` (to samo, czego używa Bambu Studio) → `device_hms` (kody 16 hex) i `device_error` (kody `print_error`, 8 hex). Odświeżanie: `go run ./internal/hms/gen` (18 zapytań, ~7 MB) → `internal/hms/data/hms_{en,pl}.json.gz` (~60–70 KB). Teksty różne dla modeli są zachowane per prefiks (A1 = `039`).
