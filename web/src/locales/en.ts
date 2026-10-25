@@ -93,6 +93,8 @@ const en = {
     hide: 'Hide',
     connecting: 'Connecting to the camera…',
     unavailable: 'Camera unavailable, retrying…',
+    fullscreen: 'Full screen',
+    exitFullscreen: 'Exit full screen',
   },
   settings: {
     title: 'Settings',

@@ -79,6 +79,8 @@ Stan (przygotowanie/druk/pauza/koniec/błąd), %, warstwa X/Y, pozostały czas +
 - Link „więcej”: `https://e.bambulab.com/index.php?e={kod}&d={prefiks}&s=device_hms|device_error&lang=…` — przekierowuje na stronę kodu w wiki albo na przegląd HMS.
 - `GET /api/printers/{id}/alerts?lang=pl|en` → `[{kind, code, severity, text, url}]`; waga HMS z bitów kodu: 1 fatal, 2 serious, 3 common, 4 info.
 
+**Kamera:** panel nad parametrami, zwijany (stan w `localStorage`). Pełny ekran przyciskiem w rogu obrazu lub podwójnym kliknięciem (Fullscreen API na tym samym `<img>`, więc strumień się nie przerywa); wyjście tym samym przyciskiem lub Esc. Bez Fullscreen API (iPhone) obraz wypełnia okno przeglądarki.
+
 **Etapy (`stg_cur`):** nazwy PL/EN dla 78 numerów wg listy ha-bambulab (`web/src/locales/stages.ts`); 0 = drukowanie i -1/255 = bezczynna nie są pokazywane. Etap widoczny w panelu i na kafelku w trakcie wydruku.
 
 ## 5. Serwer HTTP / API (szkic)

@@ -95,6 +95,8 @@ const pl: Messages = {
     hide: 'Ukryj',
     connecting: 'Łączenie z kamerą…',
     unavailable: 'Kamera niedostępna, ponawiam…',
+    fullscreen: 'Pełny ekran',
+    exitFullscreen: 'Zamknij pełny ekran',
   },
   settings: {
     title: 'Ustawienia',

@@ -21,12 +21,20 @@ const failed = ref(false)
 const attempt = ref(0) // changing it reconnects the stream
 let retry = 0
 
+const frame = ref<HTMLDivElement>()
+const native = ref(false) // the frame is the browser's fullscreen element
+const pseudo = ref(false) // fills the window where the Fullscreen API is missing (iPhone)
+const full = computed(() => native.value || pseudo.value)
+
 // The browser closes the MJPEG connection as soon as the image is removed.
 const src = computed(() =>
   open.value && props.printer.online ? `/api/printers/${encodeURIComponent(props.printer.id)}/camera?a=${attempt.value}` : '',
 )
 
 watch(open, (v) => {
+  if (!v) {
+    pseudo.value = false // the browser leaves fullscreen by itself when the frame is removed
+  }
   try {
     localStorage.setItem(STORAGE_KEY, v ? '1' : '0')
   } catch {
@@ -49,7 +57,40 @@ function onError() {
   retry = window.setTimeout(() => attempt.value++, 5000)
 }
 
-onBeforeUnmount(() => clearTimeout(retry))
+// The same image element moves to fullscreen, so the stream is not reconnected.
+async function toggleFullscreen() {
+  if (pseudo.value) {
+    pseudo.value = false
+  } else if (native.value) {
+    await document.exitFullscreen().catch(() => {})
+  } else {
+    try {
+      await frame.value!.requestFullscreen()
+    } catch {
+      pseudo.value = true
+    }
+  }
+}
+
+function onFullscreenChange() {
+  native.value = !!frame.value && document.fullscreenElement === frame.value
+}
+
+// Esc leaves the native fullscreen by itself, but not the window-filling fallback.
+function onKey(e: KeyboardEvent) {
+  if (e.key === 'Escape' && pseudo.value) {
+    pseudo.value = false
+  }
+}
+
+document.addEventListener('fullscreenchange', onFullscreenChange)
+document.addEventListener('keydown', onKey)
+
+onBeforeUnmount(() => {
+  clearTimeout(retry)
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
+  document.removeEventListener('keydown', onKey)
+})
 </script>
 
 <template>
@@ -58,8 +99,19 @@ onBeforeUnmount(() => clearTimeout(retry))
       <h4><fa-icon icon="video" class="ic" />{{ t('camera.title') }}</h4>
       <span class="toggle"><fa-icon :icon="open ? 'eye-slash' : 'eye'" class="ic" />{{ open ? t('camera.hide') : t('camera.show') }}</span>
     </button>
-    <div v-if="open" class="frame">
+    <div v-if="open" ref="frame" class="frame" :class="{ full, pseudo }" @dblclick="loaded && toggleFullscreen()">
       <img v-if="src" :src="src" alt="" @load="onLoad" @error="onError" />
+      <button
+        v-if="loaded"
+        class="fullscreen"
+        type="button"
+        :title="full ? t('camera.exitFullscreen') : t('camera.fullscreen')"
+        :aria-label="full ? t('camera.exitFullscreen') : t('camera.fullscreen')"
+        @click="toggleFullscreen"
+        @dblclick.stop
+      >
+        <fa-icon :icon="full ? 'compress' : 'expand'" />
+      </button>
       <div v-if="!loaded" class="hint">
         <template v-if="!printer.online"><fa-icon icon="plug-circle-xmark" class="ic" />{{ t('state.OFFLINE') }}</template>
         <template v-else-if="failed"><fa-icon icon="video-slash" class="ic" />{{ t('camera.unavailable') }}</template>
@@ -108,6 +160,38 @@ h4 {
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+.frame.full {
+  border-radius: 0;
+  background: #000;
+}
+
+.frame.pseudo {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  aspect-ratio: auto;
+}
+
+.fullscreen {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 50%);
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.fullscreen:hover,
+.fullscreen:focus-visible {
+  opacity: 1;
 }
 
 .hint {
