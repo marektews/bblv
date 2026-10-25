@@ -55,13 +55,15 @@ onBeforeUnmount(() => clearTimeout(retry))
 <template>
   <section class="camera">
     <button class="head" type="button" @click="open = !open">
-      <h4>{{ t('camera.title') }}</h4>
-      <span class="toggle">{{ open ? t('camera.hide') : t('camera.show') }}</span>
+      <h4><fa-icon icon="video" class="ic" />{{ t('camera.title') }}</h4>
+      <span class="toggle"><fa-icon :icon="open ? 'eye-slash' : 'eye'" class="ic" />{{ open ? t('camera.hide') : t('camera.show') }}</span>
     </button>
     <div v-if="open" class="frame">
       <img v-if="src" :src="src" alt="" @load="onLoad" @error="onError" />
       <div v-if="!loaded" class="hint">
-        {{ !printer.online ? t('state.OFFLINE') : failed ? t('camera.unavailable') : t('camera.connecting') }}
+        <template v-if="!printer.online"><fa-icon icon="plug-circle-xmark" class="ic" />{{ t('state.OFFLINE') }}</template>
+        <template v-else-if="failed"><fa-icon icon="video-slash" class="ic" />{{ t('camera.unavailable') }}</template>
+        <template v-else><fa-icon icon="spinner" spin class="ic" />{{ t('camera.connecting') }}</template>
       </div>
     </div>
   </section>

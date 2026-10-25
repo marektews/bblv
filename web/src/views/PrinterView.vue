@@ -18,12 +18,12 @@ const printer = computed(() => printers.value.find((p) => p.id === props.id))
 <template>
   <div v-if="printer" class="printer-view">
     <div class="head">
-      <router-link to="/" class="back">← {{ t('printer.back') }}</router-link>
+      <router-link to="/" class="back"><fa-icon icon="arrow-left" class="ic" />{{ t('printer.back') }}</router-link>
       <h2>{{ printer.name }}</h2>
       <span class="model">{{ printer.model }}</span>
       <StateTag :printer="printer" />
       <el-tooltip v-if="printer.experimental" :content="t('printer.experimentalHint')">
-        <el-tag type="warning" size="small">{{ t('printer.experimental') }}</el-tag>
+        <el-tag type="warning" size="small"><fa-icon icon="flask" class="ic" />{{ t('printer.experimental') }}</el-tag>
       </el-tooltip>
     </div>
     <div class="layout">

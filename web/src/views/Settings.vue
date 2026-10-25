@@ -145,12 +145,12 @@ async function changePassword(remove = false) {
 
 <template>
   <div class="settings">
-    <h2>{{ t('settings.title') }}</h2>
+    <h2><fa-icon icon="gear" class="ic" />{{ t('settings.title') }}</h2>
 
     <section>
       <div class="section-head">
-        <h3>{{ t('settings.printers') }}</h3>
-        <el-button size="small" @click="openNew()">{{ t('settings.addManually') }}</el-button>
+        <h3><fa-icon icon="print" class="ic" />{{ t('settings.printers') }}</h3>
+        <el-button size="small" @click="openNew()"><fa-icon icon="plus" class="ic" />{{ t('settings.addManually') }}</el-button>
       </div>
       <el-table :data="config?.printers ?? []" :empty-text="t('settings.noPrinters')" size="small">
         <el-table-column prop="name" :label="t('settings.name')" min-width="140" />
@@ -160,21 +160,24 @@ async function changePassword(remove = false) {
         <el-table-column :label="t('settings.accessCode')" width="130">
           <template #default="{ row }">
             <el-tag :type="row.hasAccessCode ? 'success' : 'danger'" size="small">
+              <fa-icon :icon="row.hasAccessCode ? 'key' : 'xmark'" class="ic" />
               {{ row.hasAccessCode ? t('settings.codeSet') : t('settings.codeMissing') }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column width="170" align="right">
+        <el-table-column width="200" align="right">
           <template #default="{ row }">
-            <el-button size="small" @click="openEdit(row as PrinterConfig)">{{ t('settings.edit') }}</el-button>
-            <el-button size="small" type="danger" plain @click="remove(row as PrinterConfig)">{{ t('settings.delete') }}</el-button>
+            <el-button size="small" @click="openEdit(row as PrinterConfig)"><fa-icon icon="pen" class="ic" />{{ t('settings.edit') }}</el-button>
+            <el-button size="small" type="danger" plain @click="remove(row as PrinterConfig)">
+              <fa-icon icon="trash" class="ic" />{{ t('settings.delete') }}
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
     </section>
 
     <section>
-      <h3>{{ t('settings.discovered') }}</h3>
+      <h3><fa-icon icon="magnifying-glass" class="ic" />{{ t('settings.discovered') }}</h3>
       <p class="hint">{{ t('settings.discoveredHint') }}</p>
       <el-alert v-if="discoveryError" type="warning" :title="t('settings.discoveryUnavailable', { msg: discoveryError })" :closable="false" />
       <el-table :data="discovered" :empty-text="t('settings.noneDiscovered')" size="small">
@@ -185,29 +188,33 @@ async function changePassword(remove = false) {
         <el-table-column prop="firmware" :label="t('status.firmware')" width="120" />
         <el-table-column width="170" align="right">
           <template #default="{ row }">
-            <el-tag v-if="row.configuredAs" size="small" type="info">{{ t('settings.alreadyAdded') }}</el-tag>
-            <el-button v-else size="small" type="primary" @click="openNew(row as DiscoveredPrinter)">{{ t('settings.add') }}</el-button>
+            <el-tag v-if="row.configuredAs" size="small" type="info"><fa-icon icon="check" class="ic" />{{ t('settings.alreadyAdded') }}</el-tag>
+            <el-button v-else size="small" type="primary" @click="openNew(row as DiscoveredPrinter)">
+              <fa-icon icon="plus" class="ic" />{{ t('settings.add') }}
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
     </section>
 
     <section>
-      <h3>{{ t('settings.importTitle') }}</h3>
+      <h3><fa-icon icon="file-import" class="ic" />{{ t('settings.importTitle') }}</h3>
       <p class="hint">{{ t('settings.importHint') }}</p>
       <p v-if="config" class="hint">
         <code>{{ config.studioConfig.path }}</code> —
         {{ config.studioConfig.found ? t('settings.studioFound') : t('settings.studioNotFound') }}
       </p>
       <div class="buttons">
-        <el-button :disabled="!config?.studioConfig.found" :loading="importing" @click="runImport()">{{ t('settings.importLocal') }}</el-button>
-        <el-button :loading="importing" @click="confFile?.click()">{{ t('settings.importFile') }}</el-button>
+        <el-button :disabled="!config?.studioConfig.found" :loading="importing" @click="runImport()">
+          <fa-icon icon="desktop" class="ic" />{{ t('settings.importLocal') }}
+        </el-button>
+        <el-button :loading="importing" @click="confFile?.click()"><fa-icon icon="file-arrow-up" class="ic" />{{ t('settings.importFile') }}</el-button>
         <input ref="confFile" type="file" accept=".conf" hidden @change="onConfFile" />
       </div>
     </section>
 
     <section>
-      <h3>{{ t('settings.password') }}</h3>
+      <h3><fa-icon icon="lock" class="ic" />{{ t('settings.password') }}</h3>
       <p class="hint">{{ config?.passwordSet ? t('settings.passwordSetHint') : t('settings.passwordHint') }}</p>
       <el-form label-position="top" class="password" @submit.prevent="changePassword()">
         <el-form-item v-if="config?.passwordSet" :label="t('settings.currentPassword')">
@@ -221,10 +228,10 @@ async function changePassword(remove = false) {
         </el-form-item>
         <div class="buttons">
           <el-button type="primary" native-type="submit" :loading="pw.busy" :disabled="!pw.password || pwMismatch">
-            {{ config?.passwordSet ? t('settings.changePassword') : t('settings.setPassword') }}
+            <fa-icon icon="floppy-disk" class="ic" />{{ config?.passwordSet ? t('settings.changePassword') : t('settings.setPassword') }}
           </el-button>
           <el-button v-if="config?.passwordSet" :loading="pw.busy" :disabled="!pw.current" @click="changePassword(true)">
-            {{ t('settings.removePassword') }}
+            <fa-icon icon="lock-open" class="ic" />{{ t('settings.removePassword') }}
           </el-button>
         </div>
       </el-form>

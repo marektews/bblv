@@ -70,7 +70,7 @@ async function submit() {
     </el-form>
     <template #footer>
       <el-button @click="emit('close')">{{ t('settings.cancel') }}</el-button>
-      <el-button type="primary" :loading="saving" @click="submit">{{ t('settings.save') }}</el-button>
+      <el-button type="primary" :loading="saving" @click="submit"><fa-icon icon="floppy-disk" class="ic" />{{ t('settings.save') }}</el-button>
     </template>
   </el-dialog>
 </template>

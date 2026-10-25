@@ -73,7 +73,9 @@ async function askPlate(plates: number[]): Promise<number> {
 <template>
   <div class="geometry-notice">
     <el-alert v-if="alert" :type="alert.type" :title="alert.text" :closable="false" show-icon />
-    <el-button :loading="uploading" size="small" @click="input?.click()">{{ t('geometry.upload') }}</el-button>
+    <el-button :loading="uploading" size="small" @click="input?.click()">
+      <fa-icon icon="upload" class="ic" />{{ t('geometry.upload') }}
+    </el-button>
     <input ref="input" type="file" accept=".gcode,.3mf" hidden @change="onFile" />
   </div>
 </template>

@@ -4,6 +4,7 @@ import 'element-plus/theme-chalk/dark/css-vars.css'
 import { createApp } from 'vue'
 import App from './App.vue'
 import { i18n } from './i18n'
+import { installIcons } from './icons'
 import { router } from './router'
 import { start } from './store'
 import './style.css'
@@ -14,5 +15,5 @@ const applyTheme = () => document.documentElement.classList.toggle('dark', dark.
 applyTheme()
 dark.addEventListener('change', applyTheme)
 
-createApp(App).use(ElementPlus).use(i18n).use(router).mount('#app')
+createApp(App).use(ElementPlus).use(i18n).use(router).use(installIcons).mount('#app')
 start()

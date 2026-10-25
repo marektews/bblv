@@ -45,12 +45,18 @@ const title = (a: Alert) => (a.kind === 'error' ? `${t('status.printError')} ${a
   <div v-else-if="alerts" class="alerts">
     <el-alert v-for="a in alerts" :key="a.kind + a.code" :type="typeOf(a)" :title="title(a)" :closable="false" show-icon>
       <p v-if="a.text" class="text">{{ a.text }}</p>
-      <a :href="a.url" target="_blank" rel="noopener noreferrer">{{ t('status.moreInfo') }}</a>
+      <a :href="a.url" target="_blank" rel="noopener noreferrer">
+        {{ t('status.moreInfo') }}<fa-icon icon="arrow-up-right-from-square" class="ic-after" />
+      </a>
     </el-alert>
   </div>
   <div v-else class="codes">
-    <el-tag v-if="printer.status.printError" type="danger">{{ t('status.printError') }} {{ errorCode(printer.status.printError) }}</el-tag>
-    <el-tag v-for="code in printer.status.hms" :key="code" type="warning">HMS {{ code }}</el-tag>
+    <el-tag v-if="printer.status.printError" type="danger">
+      <fa-icon icon="circle-exclamation" class="ic" />{{ t('status.printError') }} {{ errorCode(printer.status.printError) }}
+    </el-tag>
+    <el-tag v-for="code in printer.status.hms" :key="code" type="warning">
+      <fa-icon icon="triangle-exclamation" class="ic" />HMS {{ code }}
+    </el-tag>
   </div>
 </template>
 

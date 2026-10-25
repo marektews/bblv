@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { IconName } from '@fortawesome/fontawesome-svg-core'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { PrinterInfo } from '../api'
@@ -16,7 +17,17 @@ const types: Record<string, TagType> = {
   FAILED: 'danger',
 }
 
+const icons: Record<string, IconName> = {
+  IDLE: 'moon',
+  PREPARE: 'gears',
+  RUNNING: 'print',
+  PAUSE: 'pause',
+  FINISH: 'circle-check',
+  FAILED: 'circle-xmark',
+}
+
 const type = computed<TagType>(() => (props.printer.online ? (types[props.printer.status.state] ?? 'info') : 'info'))
+const icon = computed<IconName>(() => (props.printer.online ? (icons[props.printer.status.state] ?? 'circle-question') : 'plug-circle-xmark'))
 const label = computed(() => {
   if (!props.printer.online) {
     return t('state.OFFLINE')
@@ -27,5 +38,5 @@ const label = computed(() => {
 </script>
 
 <template>
-  <el-tag :type="type" effect="dark" size="small">{{ label }}</el-tag>
+  <el-tag :type="type" effect="dark" size="small"><fa-icon :icon="icon" class="ic" />{{ label }}</el-tag>
 </template>

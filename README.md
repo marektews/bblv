@@ -163,6 +163,8 @@ bblv version
   printer protocols; the list of print stage numbers comes from ha-bambulab.
 - HMS and error code descriptions are © Bambu Lab, from the service Bambu
   Studio uses.
+- Icons: [Font Awesome Free](https://fontawesome.com) (icons CC BY 4.0, code
+  MIT).
 
 bblv is not affiliated with Bambu Lab.
 

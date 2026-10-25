@@ -135,6 +135,7 @@ recordings/     nagrania MQTT (.jsonl)
   - TypeScript 6.x — TS 7 (natywny, w Go) nie ma API JS, którego wymaga `vue-tsc`.
   - Element Plus importowany w całości (~350 KB JS po gzip); serwer wysyła pliki tekstowe skompresowane gzip.
   - Paczki npm instalowane z `--before` (wersje co najmniej 2 tygodnie po publikacji).
+  - Ikony: Font Awesome Free Solid (`@fortawesome/vue-fontawesome`), wbudowane w bundle (działa offline); w paczce tylko ikony zarejestrowane w `web/src/icons.ts`, w szablonach `<fa-icon icon="…" class="ic" />`.
 - i18n PL/EN (`vue-i18n` + lokalizacje Element Plus), język wg przeglądarki + przełącznik.
 - Motyw jasny/ciemny wg systemu.
 - Responsywny pulpit i widok szczegółowy (telefon); konfiguracja dopracowana pod komputer.

@@ -55,47 +55,86 @@ const slots = computed<Slot[]>(() => {
 <template>
   <div class="status-panel">
     <section v-if="active">
-      <h4>{{ t('status.progress') }}</h4>
+      <h4><fa-icon icon="bars-progress" class="ic" />{{ t('status.progress') }}</h4>
       <el-progress :percentage="s.percent" :stroke-width="10" />
       <el-descriptions :column="1" size="small" border>
-        <el-descriptions-item :label="t('status.layer')">{{ s.layer }} / {{ s.totalLayers }}</el-descriptions-item>
-        <el-descriptions-item :label="t('status.remaining')">{{ duration(s.remainingMin) }}</el-descriptions-item>
-        <el-descriptions-item :label="t('status.finishAt')">{{ finishAt(s.remainingMin) }}</el-descriptions-item>
+        <el-descriptions-item>
+          <template #label><fa-icon icon="layer-group" class="ic" />{{ t('status.layer') }}</template>
+          {{ s.layer }} / {{ s.totalLayers }}
+        </el-descriptions-item>
+        <el-descriptions-item>
+          <template #label><fa-icon icon="hourglass-half" class="ic" />{{ t('status.remaining') }}</template>
+          {{ duration(s.remainingMin) }}
+        </el-descriptions-item>
+        <el-descriptions-item>
+          <template #label><fa-icon icon="flag-checkered" class="ic" />{{ t('status.finishAt') }}</template>
+          {{ finishAt(s.remainingMin) }}
+        </el-descriptions-item>
       </el-descriptions>
     </section>
 
     <section>
-      <h4>{{ t('status.temperatures') }}</h4>
+      <h4><fa-icon icon="temperature-half" class="ic" />{{ t('status.temperatures') }}</h4>
       <el-descriptions :column="1" size="small" border>
-        <el-descriptions-item :label="t('status.nozzle')">{{ temp(s.nozzleTemp, s.nozzleTarget) }}</el-descriptions-item>
-        <el-descriptions-item :label="t('status.bed')">{{ temp(s.bedTemp, s.bedTarget) }}</el-descriptions-item>
+        <el-descriptions-item>
+          <template #label><fa-icon icon="fire" class="ic" />{{ t('status.nozzle') }}</template>
+          {{ temp(s.nozzleTemp, s.nozzleTarget) }}
+        </el-descriptions-item>
+        <el-descriptions-item>
+          <template #label><fa-icon icon="table-cells-large" class="ic" />{{ t('status.bed') }}</template>
+          {{ temp(s.bedTemp, s.bedTarget) }}
+        </el-descriptions-item>
       </el-descriptions>
     </section>
 
     <section v-if="s.subtask">
-      <h4>{{ t('status.print') }}</h4>
+      <h4><fa-icon icon="print" class="ic" />{{ t('status.print') }}</h4>
       <el-descriptions :column="1" size="small" border>
-        <el-descriptions-item :label="t('status.file')">{{ s.subtask }}</el-descriptions-item>
-        <el-descriptions-item v-if="printer.geometry.plate" :label="t('status.plate')">{{ printer.geometry.plate }}</el-descriptions-item>
-        <el-descriptions-item :label="t('status.speed')">{{ speed }}</el-descriptions-item>
-        <el-descriptions-item v-if="stage" :label="t('status.stage')">{{ stage }}</el-descriptions-item>
+        <el-descriptions-item>
+          <template #label><fa-icon icon="file-lines" class="ic" />{{ t('status.file') }}</template>
+          {{ s.subtask }}
+        </el-descriptions-item>
+        <el-descriptions-item v-if="printer.geometry.plate">
+          <template #label><fa-icon icon="clone" class="ic" />{{ t('status.plate') }}</template>
+          {{ printer.geometry.plate }}
+        </el-descriptions-item>
+        <el-descriptions-item>
+          <template #label><fa-icon icon="gauge" class="ic" />{{ t('status.speed') }}</template>
+          {{ speed }}
+        </el-descriptions-item>
+        <el-descriptions-item v-if="stage">
+          <template #label><fa-icon icon="list-check" class="ic" />{{ t('status.stage') }}</template>
+          {{ stage }}
+        </el-descriptions-item>
       </el-descriptions>
     </section>
 
     <section>
-      <h4>{{ t('status.fans') }}</h4>
+      <h4><fa-icon icon="fan" class="ic" />{{ t('status.fans') }}</h4>
       <el-descriptions :column="1" size="small" border>
-        <el-descriptions-item :label="t('status.fanPart')">{{ s.fans.part }}%</el-descriptions-item>
+        <el-descriptions-item>
+          <template #label><fa-icon icon="wind" class="ic" />{{ t('status.fanPart') }}</template>
+          {{ s.fans.part }}%
+        </el-descriptions-item>
         <template v-if="hasChamberFans">
-          <el-descriptions-item :label="t('status.fanAux')">{{ s.fans.aux }}%</el-descriptions-item>
-          <el-descriptions-item :label="t('status.fanChamber')">{{ s.fans.chamber }}%</el-descriptions-item>
+          <el-descriptions-item>
+            <template #label><fa-icon icon="fan" class="ic" />{{ t('status.fanAux') }}</template>
+            {{ s.fans.aux }}%
+          </el-descriptions-item>
+          <el-descriptions-item>
+            <template #label><fa-icon icon="cube" class="ic" />{{ t('status.fanChamber') }}</template>
+            {{ s.fans.chamber }}%
+          </el-descriptions-item>
         </template>
-        <el-descriptions-item :label="t('status.fanHeatbreak')">{{ s.fans.heatbreak }}%</el-descriptions-item>
+        <el-descriptions-item>
+          <template #label><fa-icon icon="fire-flame-simple" class="ic" />{{ t('status.fanHeatbreak') }}</template>
+          {{ s.fans.heatbreak }}%
+        </el-descriptions-item>
       </el-descriptions>
     </section>
 
     <section v-if="slots.length">
-      <h4>{{ t('status.filaments') }}</h4>
+      <h4><fa-icon icon="palette" class="ic" />{{ t('status.filaments') }}</h4>
       <div class="slots">
         <div v-for="slot in slots" :key="slot.key" class="slot" :class="{ active: slot.active }" :title="slot.active ? t('status.active') : ''">
           <span class="swatch" :style="{ background: slot.tray.type ? slot.tray.color : 'transparent' }" />
@@ -105,21 +144,29 @@ const slots = computed<Slot[]>(() => {
             <div v-if="slot.tray.name" class="muted">{{ slot.tray.name }}</div>
             <div v-if="slot.tray.remain >= 0" class="muted">{{ slot.tray.remain }}%</div>
           </div>
-          <div v-if="slot.filaments" class="slot-use">→ {{ t('viewer.filament') }} {{ slot.filaments }}</div>
+          <div v-if="slot.filaments" class="slot-use">
+            <fa-icon icon="arrow-right" class="ic" />{{ t('viewer.filament') }} {{ slot.filaments }}
+          </div>
         </div>
       </div>
     </section>
 
     <section>
-      <h4>{{ t('status.alerts') }}</h4>
+      <h4><fa-icon icon="bell" class="ic" />{{ t('status.alerts') }}</h4>
       <AlertList :printer="printer" />
     </section>
 
     <section>
-      <h4>{{ t('status.device') }}</h4>
+      <h4><fa-icon icon="circle-info" class="ic" />{{ t('status.device') }}</h4>
       <el-descriptions :column="1" size="small" border>
-        <el-descriptions-item :label="t('status.wifi')">{{ s.wifiSignal || '—' }}</el-descriptions-item>
-        <el-descriptions-item :label="t('status.firmware')">{{ s.firmware || '—' }}</el-descriptions-item>
+        <el-descriptions-item>
+          <template #label><fa-icon icon="wifi" class="ic" />{{ t('status.wifi') }}</template>
+          {{ s.wifiSignal || '—' }}
+        </el-descriptions-item>
+        <el-descriptions-item>
+          <template #label><fa-icon icon="microchip" class="ic" />{{ t('status.firmware') }}</template>
+          {{ s.firmware || '—' }}
+        </el-descriptions-item>
       </el-descriptions>
     </section>
   </div>

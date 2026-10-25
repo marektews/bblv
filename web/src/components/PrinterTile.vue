@@ -24,7 +24,9 @@ const stage = computed(() => (active.value ? stageName(status.value.stage, local
         <div class="title">
           <strong>{{ printer.name }}</strong>
           <span class="model">{{ printer.model }}</span>
-          <el-tag v-if="printer.experimental" type="warning" size="small">{{ t('printer.experimental') }}</el-tag>
+          <el-tag v-if="printer.experimental" type="warning" size="small">
+            <fa-icon icon="flask" class="ic" />{{ t('printer.experimental') }}
+          </el-tag>
         </div>
         <div class="state">
           <StateTag :printer="printer" />
@@ -34,8 +36,8 @@ const stage = computed(() => (active.value ? stageName(status.value.stage, local
         <template v-if="active">
           <el-progress :percentage="status.percent" />
           <div class="meta">
-            {{ t('status.layer') }} {{ status.layer }}/{{ status.totalLayers }} ·
-            {{ t('status.remaining') }} {{ duration(status.remainingMin) }}
+            <span><fa-icon icon="layer-group" class="ic" />{{ t('status.layer') }} {{ status.layer }}/{{ status.totalLayers }}</span> ·
+            <span><fa-icon icon="hourglass-half" class="ic" />{{ t('status.remaining') }} {{ duration(status.remainingMin) }}</span>
           </div>
         </template>
       </div>
@@ -95,6 +97,11 @@ const stage = computed(() => (active.value ? stageName(status.value.stage, local
 .meta {
   color: var(--el-text-color-secondary);
   font-size: 12px;
+}
+
+/* An icon wraps together with its value. */
+.meta > span {
+  white-space: nowrap;
 }
 
 .file {

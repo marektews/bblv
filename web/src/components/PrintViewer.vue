@@ -149,14 +149,16 @@ watch(colorMode, (m) => scene?.setColorMode(m))
     </div>
     <div v-if="geometry" class="toolbar">
       <div class="layer">
-        <span class="layer-label">{{ t('status.layer') }} {{ shownLayer }} / {{ total }}</span>
+        <span class="layer-label"><fa-icon icon="layer-group" class="ic" />{{ t('status.layer') }} {{ shownLayer }} / {{ total }}</span>
         <el-slider :model-value="shownLayer" :min="0" :max="total" :show-tooltip="false" @input="onSlider" />
-        <el-button v-if="manual" size="small" type="primary" @click="goLive">{{ t('viewer.live') }}</el-button>
+        <el-button v-if="manual" size="small" type="primary" @click="goLive">
+          <fa-icon icon="tower-broadcast" class="ic" />{{ t('viewer.live') }}
+        </el-button>
       </div>
       <div class="options">
         <el-radio-group v-model="colorMode" size="small">
-          <el-radio-button value="filament">{{ t('viewer.byFilament') }}</el-radio-button>
-          <el-radio-button value="feature">{{ t('viewer.byFeature') }}</el-radio-button>
+          <el-radio-button value="filament"><fa-icon icon="palette" class="ic" />{{ t('viewer.byFilament') }}</el-radio-button>
+          <el-radio-button value="feature"><fa-icon icon="route" class="ic" />{{ t('viewer.byFeature') }}</el-radio-button>
         </el-radio-group>
         <span v-if="lines" class="muted">{{ t('viewer.linesMode') }}</span>
       </div>

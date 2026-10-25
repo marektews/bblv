@@ -27,12 +27,12 @@ async function submit() {
 <template>
   <div class="login">
     <el-card>
-      <h3>{{ t('login.title') }}</h3>
+      <h3><fa-icon icon="lock" class="ic" />{{ t('login.title') }}</h3>
       <el-form @submit.prevent="submit">
         <el-form-item :error="error">
           <el-input v-model="password" type="password" show-password autofocus :placeholder="t('login.password')" />
         </el-form-item>
-        <el-button type="primary" native-type="submit" :loading="busy">{{ t('login.submit') }}</el-button>
+        <el-button type="primary" native-type="submit" :loading="busy"><fa-icon icon="right-to-bracket" class="ic" />{{ t('login.submit') }}</el-button>
       </el-form>
     </el-card>
   </div>

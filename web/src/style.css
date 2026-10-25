@@ -34,6 +34,24 @@ a {
   color: var(--el-text-color-regular);
 }
 
+/* Font Awesome icon in front of a label (ic) or after it (ic-after). */
+.ic {
+  margin-right: 0.4em;
+}
+
+.ic-after {
+  margin-left: 0.3em;
+}
+
+/* A loading button shows Element Plus' spinner instead of its icon. */
+.el-button.is-loading .ic {
+  display: none;
+}
+
+.app-header .brand .ic {
+  color: var(--el-color-primary);
+}
+
 .app-main {
   padding: 16px;
   max-width: 1600px;

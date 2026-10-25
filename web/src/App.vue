@@ -20,12 +20,16 @@ async function signOut() {
 <template>
   <el-config-provider :locale="elementLocale">
     <header class="app-header">
-      <router-link to="/" class="brand">Bambu Live View</router-link>
+      <router-link to="/" class="brand"><fa-icon icon="cube" class="ic" />Bambu Live View</router-link>
       <span class="spacer" />
-      <el-tag v-if="auth.state === 'ok' && !connected" type="danger" size="small">{{ t('app.disconnected') }}</el-tag>
+      <el-tag v-if="auth.state === 'ok' && !connected" type="danger" size="small">
+        <fa-icon icon="link-slash" class="ic" />{{ t('app.disconnected') }}
+      </el-tag>
       <template v-if="auth.state === 'ok'">
-        <router-link to="/settings" class="nav">{{ t('app.settings') }}</router-link>
-        <el-button v-if="auth.required" link size="small" @click="signOut">{{ t('app.logout') }}</el-button>
+        <router-link to="/settings" class="nav"><fa-icon icon="gear" class="ic" />{{ t('app.settings') }}</router-link>
+        <el-button v-if="auth.required" link size="small" @click="signOut">
+          <fa-icon icon="right-from-bracket" class="ic" />{{ t('app.logout') }}
+        </el-button>
       </template>
       <el-radio-group :model-value="locale" size="small" @change="(v) => setLocale(v as Locale)">
         <el-radio-button value="pl">PL</el-radio-button>
