@@ -81,13 +81,19 @@ func TestPlateOf(t *testing.T) {
 	}
 }
 
-// fakeCard is an SD card with files in cache/.
+// fakeCard is an SD card; files named without a directory are in cache/.
 type fakeCard map[string]string
 
 func (c fakeCard) List(dir string) ([]*ftp.Entry, error) {
 	var out []*ftp.Entry
 	for name, body := range c {
-		out = append(out, &ftp.Entry{Name: name, Size: uint64(len(body)), Time: time.Unix(1700000000, 0)})
+		d, base := "cache", name
+		if i := strings.LastIndexByte(name, '/'); i >= 0 {
+			d, base = name[:i], name[i+1:]
+		}
+		if d == dir {
+			out = append(out, &ftp.Entry{Name: base, Size: uint64(len(body)), Time: time.Unix(1700000000, 0)})
+		}
 	}
 	return out, nil
 }
@@ -134,6 +140,27 @@ func TestFind(t *testing.T) {
 	}
 	if _, err := Find(fakeCard{"Other.gcode.3mf": "3mf"}, "Zaslepka", "/data/Metadata/plate_1.gcode"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("missing print: err = %v", err)
+	}
+}
+
+// The cache key changes with the file also outside cache/, e.g. after the
+// model is sliced again and saved under the same name.
+func TestFindStampsFilesOutsideTheCache(t *testing.T) {
+	card := fakeCard{"models/Most.3mf": "3mf", "Most.3mf": "an unrelated file in cache/"}
+	before, err := Find(card, "Most", "/sdcard/models/Most.3mf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.ThreeMF != "models/Most.3mf" || before.stamp != "Most.3mf:3:1700000000;" {
+		t.Fatalf("files = %+v", *before)
+	}
+	card["models/Most.3mf"] = "sliced again"
+	after, err := Find(card, "Most", "/sdcard/models/Most.3mf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.stamp == before.stamp {
+		t.Fatalf("stamp %q did not change with the file", after.stamp)
 	}
 }
 

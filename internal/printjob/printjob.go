@@ -133,11 +133,33 @@ func Find(c sdCard, subtask, gcodeFile string) (*Files, error) {
 		return nil, ErrNotFound
 	}
 	for _, p := range []string{f.ThreeMF, f.Gcode} {
-		if e, ok := byName[path.Base(p)]; ok && p != "" {
+		if e := entryOf(c, byName, p); e != nil {
 			f.stamp += fmt.Sprintf("%s:%d:%d;", e.Name, e.Size, e.Time.Unix())
 		}
 	}
 	return f, nil
+}
+
+// entryOf returns the listing entry of the file at p, from the listing of
+// cache/ or, for a file elsewhere, its own directory; nil when missing.
+func entryOf(c sdCard, inCache map[string]*ftp.Entry, p string) *ftp.Entry {
+	if p == "" {
+		return nil
+	}
+	dir, name := path.Split(p)
+	if dir == "cache/" {
+		return inCache[name]
+	}
+	entries, err := c.List(strings.TrimSuffix(dir, "/"))
+	if err != nil {
+		return nil
+	}
+	for _, e := range entries {
+		if e.Name == name {
+			return e
+		}
+	}
+	return nil
 }
 
 // plateOf parses N from "<prefix>N.gcode".
