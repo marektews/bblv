@@ -83,7 +83,7 @@ func Find(c sdCard, subtask, gcodeFile string) (*Files, error) {
 		if !ok || rest != name+".bbl" {
 			continue
 		}
-		if n, err := strconv.Atoi(num); err == nil && (meta == nil || e.Time.After(meta.Time)) {
+		if n, convErr := strconv.Atoi(num); convErr == nil && (meta == nil || e.Time.After(meta.Time)) {
 			meta, f.Plate = e, n
 		}
 	}
@@ -91,7 +91,7 @@ func Find(c sdCard, subtask, gcodeFile string) (*Files, error) {
 	base := name
 	if meta != nil {
 		var b bbl
-		if data, err := readAll(c, "cache/"+meta.Name, 1<<20); err == nil && json.Unmarshal(data, &b) == nil {
+		if data, readErr := readAll(c, "cache/"+meta.Name, 1<<20); readErr == nil && json.Unmarshal(data, &b) == nil {
 			f.AMSMapping = b.AMSMapping
 			if b.FilePath != "" {
 				f.ThreeMF = ftps.Path(b.FilePath)
