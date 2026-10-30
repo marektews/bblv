@@ -8,14 +8,22 @@ account needed, works on Windows and Linux (including a Raspberry Pi).
 - **3D view** of the current print built from its G-code: printed layers,
   the layer in progress highlighted, the rest as a transparent preview; a
   layer slider; colouring by filament or by path type (walls, infill,
-  supports, …).
+  supports, …); a legend with the AMS slot, filament profile and planned
+  weight of each filament.
 - **Status**: state and print stage, progress, remaining time and finish
-  time, nozzle and bed temperatures, fans, speed profile, AMS slots and the
-  external spool, HMS alerts and error codes explained in English or Polish.
-- **Camera** stream (A1 and P1 series; X1, X2, H2 and P2 with ffmpeg installed).
-- **Several printers** on one dashboard.
+  time, nozzle and bed temperatures, fans, speed profile, the slicer
+  profiles and planned filament of the print, AMS slots with spool details
+  and the conditions inside the AMS, the external spool, the SD card, HMS
+  alerts and error codes explained in English or Polish. See
+  [Dashboard and printer view](#dashboard-and-printer-view).
+- **Camera** stream (A1 and P1 series; X1, X2, H2 and P2 with ffmpeg installed),
+  also in full screen; when it does not work, the panel says why.
+- **Several printers** on one dashboard, grouped by state.
 - **Web settings**: printers found in the network are listed automatically;
   access codes can be imported from Bambu Studio.
+- **Follows printers to a new address** when the DHCP server gives them
+  another one; see [When a printer gets another
+  address](#when-a-printer-gets-another-address).
 - **Read only**: bblv never sends commands to the printer.
 
 The printer keeps working with Bambu Handy and the cloud. **LAN Only Mode and
@@ -53,7 +61,12 @@ device). Add your printers in **Settings**.
 | `-listen` | `:8080` |
 
 The data directory holds `config.json` (printers, password hash; readable
-only by its owner), the geometry cache (at most 1 GB) and recordings.
+only by its owner), the geometry cache (at most 1 GB), recordings,
+`filaments.json` (filament profile names learned from print files) and
+`printer-ca.pem` (printer CA certificates learned from the printers). bblv
+itself updates the address of a printer in `config.json` when the printer
+moves; see [When a printer gets another
+address](#when-a-printer-gets-another-address).
 
 ### Run as a service
 
@@ -90,18 +103,107 @@ Open **Settings** in the web UI.
    and change everything. For access from outside, use a VPN rather than
    exposing bblv to the internet.
 
+The printer table shows whether each printer is connected and has an SD
+card. It can be sorted by name, IP address or serial number; the browser
+remembers the order.
+
 The printer must be reachable from the server on TCP ports 8883 (MQTT),
 990 (FTPS) and 6000 (camera of the A1/P1) or 322 (RTSP camera of the X1/X2/H2/P2,
 open only with LAN live view enabled on the printer).
 
+### When a printer gets another address
+
+If a printer has been offline for 2 minutes, bblv looks for it:
+
+- at the address it announces with SSDP; the announcements do not cross
+  routers, so this works only in the same subnet;
+- by probing TCP port 8883 on every address of the /24 subnet of its last
+  address. The certificate of the printer's MQTT broker has its serial
+  number as the common name.
+
+When found, the new address is saved to `config.json` and the printer is
+reconnected. While it stays offline, the search is repeated every 10
+minutes. An address edited in **Settings** in the meantime is not
+overwritten.
+
+A printer is trusted at a new address only when its certificate is also
+signed by a Bambu Lab CA certificate learned from the printers at their
+configured addresses (kept in `printer-ca.pem` in the data directory), so
+no other device can obtain the access code by claiming a serial number.
+Until the CA that signed a printer's certificate has been learned this way,
+that printer is not followed. For a printer configured by host name rather
+than an IPv4 address, only the announced address is checked, not the
+subnet.
+
+## Dashboard and printer view
+
+The dashboard shows a tile per printer, sorted by name and grouped by
+state, with the states that need attention (failed, paused) first and
+offline printers last. The **Group by state** switch in the top bar turns
+the grouping off; the browser remembers the choice. A tile shows an alert
+icon, in the colour of the most severe alert, when the printer reports HMS
+alerts or an error code.
+
+Besides temperatures, fans and alerts, the status panel of a printer shows:
+
+- **Print**: the file and plate; the process profile, printer profile,
+  layer height and the filament profile of each filament used, from the
+  slicer settings in the G-code (the `(<project>.3mf)` suffixes Bambu Studio
+  appends to project profiles are dropped); the filament the slicer planned,
+  in grams and metres, from the `.3mf` (per filament,
+  `Metadata/slice_info.config`) or the G-code header. The 3D view legend
+  shows the filament profile and grams of each filament.
+- **Filaments**: humidity, temperature and drying (time left, temperature)
+  of each AMS unit; with several units they are named A–D, AMS HT units
+  HT1…. On the A1 series the unit is labelled AMS lite with a warning icon:
+  the AMS lite is open and has no humidity sensor, so the values the printer
+  reports may be estimates or placeholders. Each slot shows the spool's type
+  and filament profile name (see below), a mark for Bambu Lab spools with an
+  RFID tag, the percent, grams and metres left, the nozzle temperature range
+  and which filaments of the current print it feeds. That mapping comes from
+  the `.bbl` file on the SD card or, on printers that keep no `.bbl` file
+  (X2D, P2S, H2D, H2S), from the report (`print.mapping`).
+- **Device**: Wi-Fi signal, firmware, whether the printer has an SD card
+  and, for printers that report it, its free and total space; for printers
+  with an RTSP camera, whether LAN live view is enabled.
+
+When the camera does not work, the camera panel explains why from what the
+printer reports: LAN live view disabled on the printer, `ffmpeg` missing on
+the server, the RTSP port not reachable, or the login on port 6000 refused
+(the X2D, P2S and H2 answer it with a status packet, so bblv reads their
+camera over RTSP). The RTSP address is taken from the printer's report
+(`ipcam.rtsp_url`), with the configured IP address as the host.
+
+### Filament profile names
+
+The AMS reports a spool's filament profile only by its ID (`tray_info_idx`,
+e.g. `GFA00` or `P3f5ea18`). Print files pair these IDs with the profile
+names, so bblv learns them from every print file it parses, downloaded or
+uploaded, and keeps them in `filaments.json` in the data directory; the
+slots of every printer are then named. A slot whose profile has never
+appeared in a print file shows no profile name.
+
 ## How the 3D view gets the G-code
 
-When a print starts, bblv downloads the project from the printer's SD card
-over FTPS (`cache/<name>.3mf`, which contains the sliced G-code and the plate
-thumbnail), parses it once and caches the result; the plate number comes
-from the `N_<name>.bbl` file the printer writes next to it. This is tested
-with prints sent through the cloud to an A1. If the file cannot be found,
-upload the `.gcode` or `.3mf` in the printer view.
+When a print starts, bblv downloads the print file from the printer's SD
+card over FTPS, parses it once and caches the result:
+
+- **A1** (and printers that write `.bbl` files): `cache/<name>.3mf`, which
+  contains the sliced G-code and the plate thumbnail; the plate number and
+  the AMS mapping come from the `N_<name>.bbl` file the printer writes next
+  to it. This is tested with prints sent through the cloud to an A1.
+- **X2D, P2S, H2S**: the printer keeps `cache/<name>.gcode.3mf` and reports
+  the G-code path inside the printer, `/data/Metadata/plate_N.gcode`; the
+  plate number comes from that path.
+
+The SD card is required: printers that print from internal storage without
+an SD card (seen on an X2D and an H2D) expose no files over FTPS. bblv then
+does not try to download the print, and the printer view says so and offers
+the upload. Likewise, if the file
+cannot be found, upload the `.gcode` or `.3mf` in the printer view.
+
+Cached geometry is rebuilt automatically when a new version of bblv keeps
+more data about a print in the cache.
 
 ## Recording a print
 
@@ -142,6 +244,15 @@ Both build the frontend (`web/`, Vue 3 + Element Plus + Three.js) into
 
 During development run `bblv serve` and, in `web/`, `npm run dev`; the Vite
 dev server proxies `/api` to `localhost:8080`.
+
+GitHub Actions runs these checks on every push and pull request, then the
+build, and keeps the binaries as an artifact of the run:
+
+```sh
+go vet ./... && go test -race ./...
+go run ./tools/shadowcheck                       # names shadowing others in Go
+cd web && npm run typecheck && npm run shadowcheck   # the same in TypeScript and Vue
+```
 
 The HMS and error code descriptions are generated from the texts Bambu Lab
 publishes for Bambu Studio:
