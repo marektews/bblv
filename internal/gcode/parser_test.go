@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"math"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -158,6 +159,29 @@ func TestEncode(t *testing.T) {
 	base := (len(m.Points) - 1) * PointFloats
 	if f(base) != p.X || f(base+5) != float32(p.Layer) || f(base+6) != float32(int(p.Tool)<<8|int(p.Feature)) {
 		t.Fatalf("last point encoded as %v %v %v", f(base), f(base+5), f(base+6))
+	}
+}
+
+func TestParseSlicerProfiles(t *testing.T) {
+	config := "; CONFIG_BLOCK_START\n; filament_ids = P3f5ea18;GFA00\n" +
+		`; filament_settings_id = "Tinmorry PETG ECO @Bambu Lab A1 0.4 nozzle(a.3mf)(b.3mf)";"Bambu PLA Basic @BBL A1"` + "\n" +
+		"; layer_height = 0.2\n; print_settings_id = 0.20mm Standard @BBL A1\n; printer_settings_id = Bambu Lab A1 0.4 nozzle\n; CONFIG_BLOCK_END\n"
+	m, err := Parse(strings.NewReader(sample + config))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Settings{
+		PrintProfile: "0.20mm Standard @BBL A1", PrinterProfile: "Bambu Lab A1 0.4 nozzle", LayerHeight: 0.2,
+		FilamentProfiles: []string{"Tinmorry PETG ECO @Bambu Lab A1 0.4 nozzle", "Bambu PLA Basic @BBL A1"},
+		FilamentIDs:      []string{"P3f5ea18", "GFA00"},
+	}
+	if !reflect.DeepEqual(m.Settings, want) {
+		t.Fatalf("settings = %+v", m.Settings)
+	}
+	// A single name is quoted too.
+	m, err = Parse(strings.NewReader(`; filament_settings_id = "Generic PLA @BBL A1"` + "\n"))
+	if err != nil || !reflect.DeepEqual(m.Settings.FilamentProfiles, []string{"Generic PLA @BBL A1"}) {
+		t.Fatalf("filament profiles = %q, %v", m.Settings.FilamentProfiles, err)
 	}
 }
 

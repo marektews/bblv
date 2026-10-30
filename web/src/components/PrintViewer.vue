@@ -2,7 +2,7 @@
 import { computed, markRaw, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { EXTERNAL_TRAY, geometryUrl, type PrinterInfo } from '../api'
-import { ACTIVE_STATES, slotLabel, trayAt, useFormat } from '../format'
+import { ACTIVE_STATES, profileName, slotLabel, trayAt, useFormat } from '../format'
 import type { Locale } from '../i18n'
 import { featureColor, featureLabel } from '../viewer/features'
 import { loadGeometry, type LoadedGeometry } from '../viewer/geometry'
@@ -39,6 +39,8 @@ interface LegendItem {
   key: string
   color: string
   label: string
+  profile?: string // the filament profile, with the full name in profileTitle
+  profileTitle?: string
   detail?: string // where a filament comes from, e.g. "slot 4 · PETG"
   usage?: string // how much of it the print needs, e.g. "235,3 g"
   active?: boolean // the filament being printed now
@@ -60,9 +62,14 @@ const legend = computed<LegendItem[]>(() => {
   const s = props.printer.status
   const mapping = props.printer.geometry.amsMapping ?? []
   const used = props.printer.geometry.usage?.filaments ?? []
+  const profiles = props.printer.geometry.settings?.filamentProfiles ?? []
   const live = props.printer.online && ACTIVE_STATES.includes(s.state)
   return g.tools.map((tool) => {
     const item: LegendItem = { key: `t${tool}`, color: g.meta.filaments[tool] ?? '#808080', label: `${t('viewer.filament')} ${tool + 1}` }
+    if (profiles[tool]) {
+      item.profile = profileName(profiles[tool])
+      item.profileTitle = profiles[tool]
+    }
     const use = used.find((f) => f.filament === tool + 1)
     if (use) {
       item.usage = amount(use.grams, 'g')
@@ -178,6 +185,7 @@ watch(colorMode, (m) => scene?.setColorMode(m))
           :title="item.active ? t('status.active') : ''"
         >
           <span class="swatch" :style="{ background: item.color }" />{{ item.label }}
+          <span v-if="item.profile" :title="item.profileTitle">{{ item.profile }}</span>
           <span v-if="item.usage" class="detail">{{ item.usage }}</span>
           <span v-if="item.detail" class="detail">→ {{ item.detail }}</span>
         </span>

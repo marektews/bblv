@@ -41,6 +41,20 @@ type Model struct {
 	// .3mf, each filament used; zero and nil when unknown.
 	UsedG, UsedM float64
 	Usage        []FilamentUse
+
+	Settings Settings // from the slicer settings at the end of the G-code
+}
+
+// Settings are the slicer profiles a print was sliced with; empty when the
+// G-code does not name them.
+type Settings struct {
+	PrintProfile     string   `json:"printProfile,omitempty"`     // e.g. "0.20mm Standard @BBL A1"
+	PrinterProfile   string   `json:"printerProfile,omitempty"`   // e.g. "Bambu Lab A1 0.4 nozzle"
+	LayerHeight      float64  `json:"layerHeight,omitempty"`      // mm
+	FilamentProfiles []string `json:"filamentProfiles,omitempty"` // indexed by filament number - 1
+	// FilamentIDs identify the filament profiles, e.g. GFA00 or P3f5ea18;
+	// the AMS reports a spool's profile only by this ID (tray_info_idx).
+	FilamentIDs []string `json:"filamentIds,omitempty"`
 }
 
 // FilamentUse is how much of one filament the slicer planned for the print.

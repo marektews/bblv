@@ -15,6 +15,7 @@ import (
 	"github.com/marektews/bblv/internal/cache"
 	"github.com/marektews/bblv/internal/camera"
 	"github.com/marektews/bblv/internal/config"
+	"github.com/marektews/bblv/internal/gcode"
 	"github.com/marektews/bblv/internal/printer"
 	"github.com/marektews/bblv/internal/printjob"
 	"github.com/marektews/bblv/internal/recording"
@@ -40,13 +41,17 @@ type Geometry struct {
 	Thumbnail  bool   `json:"thumbnail"`
 	Error      string `json:"error,omitempty"`
 
-	Usage *printjob.Usage `json:"usage,omitempty"` // filament the slicer planned
+	Usage    *printjob.Usage `json:"usage,omitempty"`    // filament the slicer planned
+	Settings *gcode.Settings `json:"settings,omitempty"` // slicer profiles
 
 	path, thumbPath string
 }
 
 func ready(res *printjob.Result) Geometry {
-	return Geometry{State: GeometryReady, Key: res.Key, Thumbnail: res.Thumbnail != "", Usage: res.Usage, path: res.Geometry, thumbPath: res.Thumbnail}
+	return Geometry{
+		State: GeometryReady, Key: res.Key, Thumbnail: res.Thumbnail != "", Usage: res.Usage, Settings: res.Settings,
+		path: res.Geometry, thumbPath: res.Thumbnail,
+	}
 }
 
 // Info is the public view of a printer.
@@ -72,8 +77,9 @@ type Event struct {
 
 // Monitor tracks a set of printers.
 type Monitor struct {
-	store  *cache.Cache
-	ffmpeg string
+	store     *cache.Cache
+	ffmpeg    string
+	filaments filamentNames
 
 	mu       sync.Mutex
 	ctx      context.Context // set by Run; printers added later start at once
@@ -86,6 +92,23 @@ type Monitor struct {
 // of the ffmpeg binary used for RTSP cameras, "" when not available.
 func New(store *cache.Cache, ffmpeg string) *Monitor {
 	return &Monitor{store: store, ffmpeg: ffmpeg, subs: map[chan Event]struct{}{}}
+}
+
+// KeepFilamentNames loads the names of filament profiles learned before
+// from path, where the names learned from now on are saved too.
+func (m *Monitor) KeepFilamentNames(path string) error {
+	return m.filaments.load(path)
+}
+
+// learnFilaments remembers the filament profiles of a print and, when they
+// name more spools than before, updates every printer.
+func (m *Monitor) learnFilaments(s *gcode.Settings) {
+	if !m.filaments.learn(s) {
+		return
+	}
+	for _, info := range m.Printers() {
+		m.publish(Event{Type: "printer", Info: info})
+	}
 }
 
 // AddPrinter adds a printer reached over the local network.

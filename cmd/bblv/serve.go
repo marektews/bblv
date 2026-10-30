@@ -67,6 +67,9 @@ func serve(ctx context.Context, o serveOptions) error {
 	}
 	ffmpeg, _ := exec.LookPath("ffmpeg")
 	mon := monitor.New(store, ffmpeg)
+	if err = mon.KeepFilamentNames(filepath.Join(o.dataDir, "filaments.json")); err != nil {
+		slog.Warn("filament names not loaded", "err", err)
+	}
 	if o.replay != "" {
 		if err := mon.AddReplay(o.replay, o.speed); err != nil {
 			return err

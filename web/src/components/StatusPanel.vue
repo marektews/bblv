@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { EXTERNAL_TRAY, type PrinterInfo, type Tray } from '../api'
-import { ACTIVE_STATES, amsName, slotLabel, useFormat } from '../format'
+import { ACTIVE_STATES, amsName, profileName, slotLabel, useFormat } from '../format'
 import { stageName } from '../locales/stages'
 import AlertList from './AlertList.vue'
 
@@ -40,6 +40,17 @@ const usage = computed(() => {
   return u ? [amount(u.grams, 'g'), u.meters > 0 ? amount(u.meters, 'm') : ''].filter(Boolean).join(' · ') : ''
 })
 
+// Filament profiles of the print: those the .3mf says it uses, or the only one.
+const filamentProfiles = computed(() => {
+  const g = props.printer.geometry
+  const names = g.settings?.filamentProfiles ?? []
+  const used = g.usage?.filaments ?? []
+  if (used.length) {
+    return used.map((f) => ({ key: f.filament, name: names[f.filament - 1] ?? '', color: f.color })).filter((f) => f.name)
+  }
+  return names.length === 1 ? [{ key: 1, name: names[0], color: '' }] : []
+})
+
 interface AMSEnv {
   key: string
   label: string
@@ -71,6 +82,7 @@ interface Slot {
   key: string
   label: string
   tray: Tray
+  name: string // the filament profile without the printer, or the spool's brand name
   active: boolean
   filaments: string // the print's filaments fed from this slot, e.g. "1, 3"
   left: string[] // what is left on the spool, e.g. ["96%", "960 g", "317 m"]
@@ -84,7 +96,7 @@ function spool(tray: Tray) {
     tray.remainM >= 0 ? amount(tray.remainM, 'm') : '',
   ].filter(Boolean)
   const temps = tray.tempMin > 0 && tray.tempMax > 0 ? `${tray.tempMin}–${tray.tempMax} °C` : ''
-  return { left, temps }
+  return { left, temps, name: profileName(tray.profile) || tray.name }
 }
 
 const slots = computed<Slot[]>(() => {
@@ -161,6 +173,24 @@ const slots = computed<Slot[]>(() => {
           <template #label><fa-icon icon="clone" class="ic" />{{ t('status.plate') }}</template>
           {{ printer.geometry.plate }}
         </el-descriptions-item>
+        <el-descriptions-item v-if="printer.geometry.settings?.printProfile">
+          <template #label><fa-icon icon="sliders" class="ic" />{{ t('status.printProfile') }}</template>
+          {{ printer.geometry.settings.printProfile }}
+        </el-descriptions-item>
+        <el-descriptions-item v-if="printer.geometry.settings?.printerProfile">
+          <template #label><fa-icon icon="gear" class="ic" />{{ t('status.printerProfile') }}</template>
+          {{ printer.geometry.settings.printerProfile }}
+        </el-descriptions-item>
+        <el-descriptions-item v-if="printer.geometry.settings?.layerHeight">
+          <template #label><fa-icon icon="ruler-vertical" class="ic" />{{ t('status.layerHeight') }}</template>
+          {{ amount(printer.geometry.settings.layerHeight, 'mm') }}
+        </el-descriptions-item>
+        <el-descriptions-item v-if="filamentProfiles.length">
+          <template #label><fa-icon icon="palette" class="ic" />{{ t('status.filamentProfile') }}</template>
+          <div v-for="f in filamentProfiles" :key="f.key" class="profile">
+            <span v-if="f.color" class="dot" :style="{ background: f.color }" />{{ f.name }}
+          </div>
+        </el-descriptions-item>
         <el-descriptions-item v-if="usage">
           <template #label><fa-icon icon="weight-hanging" class="ic" />{{ t('status.usage') }}</template>
           {{ usage }}
@@ -220,7 +250,7 @@ const slots = computed<Slot[]>(() => {
               <el-tag v-if="slot.tray.bambu" size="small" type="success" class="bambu" :title="t('status.bambuSpool')">Bambu</el-tag>
             </div>
             <div>{{ slot.tray.type || t('status.emptySlot') }}</div>
-            <div v-if="slot.tray.name" class="muted">{{ slot.tray.name }}</div>
+            <div v-if="slot.name" class="muted">{{ slot.name }}</div>
             <div v-if="slot.left.length" class="muted amounts"><span v-for="a in slot.left" :key="a">{{ a }}</span></div>
             <div v-if="slot.temps" class="muted" :title="t('status.nozzleRange')">{{ slot.temps }}</div>
           </div>
@@ -325,6 +355,20 @@ h4 {
   display: flex;
   flex-wrap: wrap;
   column-gap: 6px;
+}
+
+.profile {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.profile .dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid var(--el-border-color);
 }
 
 .ams-env {

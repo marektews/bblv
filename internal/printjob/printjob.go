@@ -152,11 +152,12 @@ func plateOf(name, prefix string) (int, bool) {
 
 // Result points to the cached files of a print.
 type Result struct {
-	Key       string       // cache key; changes whenever the geometry changes
-	Geometry  string       // encoded geometry
-	Thumbnail string       // plate thumbnail (PNG), "" when unavailable
-	Model     *gcode.Model // nil when the geometry came from the cache
-	Usage     *Usage       // nil when the files do not tell
+	Key       string          // cache key; changes whenever the geometry changes
+	Geometry  string          // encoded geometry
+	Thumbnail string          // plate thumbnail (PNG), "" when unavailable
+	Model     *gcode.Model    // nil when the geometry came from the cache
+	Usage     *Usage          // nil when the files do not tell
+	Settings  *gcode.Settings // slicer profiles, nil when the G-code does not name them
 }
 
 // Usage is the filament the slicer planned for the print.
@@ -180,6 +181,25 @@ func usageOf(m *gcode.Model) *Usage {
 	}
 	return u
 }
+
+func settingsOf(m *gcode.Model) *gcode.Settings {
+	s := m.Settings
+	if s.PrintProfile == "" && s.PrinterProfile == "" && len(s.FilamentProfiles) == 0 {
+		return nil
+	}
+	return &s
+}
+
+// details is what the cache keeps beside the geometry, as JSON.
+type details struct {
+	Version  int             `json:"version"`
+	Usage    *Usage          `json:"usage,omitempty"`
+	Settings *gcode.Settings `json:"settings,omitempty"`
+}
+
+// detailsVersion changes when the details gain something; entries cached
+// by older versions are parsed again.
+const detailsVersion = 2
 
 // Build returns cached geometry for the print, creating it when needed. The
 // .3mf is preferred because it is compressed and also holds the thumbnail;
@@ -240,33 +260,35 @@ func BuildFile(name string, plate int, store *cache.Cache) (*Result, error) {
 	return save(store, key, model, png)
 }
 
-// cached returns a print parsed before. Entries cached without the filament
-// usage, by older versions, are parsed again.
+// cached returns a print parsed before. Entries cached by older versions,
+// without the current details, are parsed again.
 func cached(store *cache.Cache, key string) (*Result, bool) {
 	p, ok := store.Get(key, ".bin")
 	if !ok {
 		return nil, false
 	}
-	usage, ok := store.Get(key, ".json")
+	name, ok := store.Get(key, ".json")
 	if !ok {
 		return nil, false
 	}
-	r := &Result{Key: key, Geometry: p}
-	r.Thumbnail, _ = store.Get(key, ".png")
-	if b, err := os.ReadFile(usage); err == nil {
-		json.Unmarshal(b, &r.Usage)
+	b, err := os.ReadFile(name)
+	var d details
+	if err != nil || json.Unmarshal(b, &d) != nil || d.Version != detailsVersion {
+		return nil, false
 	}
+	r := &Result{Key: key, Geometry: p, Usage: d.Usage, Settings: d.Settings}
+	r.Thumbnail, _ = store.Get(key, ".png")
 	return r, true
 }
 
 func save(store *cache.Cache, key string, model *gcode.Model, png []byte) (*Result, error) {
-	r := &Result{Key: key, Model: model, Usage: usageOf(model)}
+	r := &Result{Key: key, Model: model, Usage: usageOf(model), Settings: settingsOf(model)}
 	var err error
 	if r.Geometry, err = store.Put(key, ".bin", model.Encode); err != nil {
 		return nil, err
 	}
-	// Written also when empty: its presence marks an entry with the usage known.
-	if _, err = store.Put(key, ".json", func(w io.Writer) error { return json.NewEncoder(w).Encode(r.Usage) }); err != nil {
+	d := details{Version: detailsVersion, Usage: r.Usage, Settings: r.Settings}
+	if _, err = store.Put(key, ".json", func(w io.Writer) error { return json.NewEncoder(w).Encode(d) }); err != nil {
 		return nil, err
 	}
 	if png != nil {

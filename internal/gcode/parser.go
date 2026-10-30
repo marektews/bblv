@@ -143,7 +143,43 @@ func (p *parser) setting(key, val string) {
 		if v, err := strconv.ParseFloat(first, 64); err == nil && v > 0 {
 			p.filamentDiam = v
 		}
+	case "print_settings_id":
+		p.m.Settings.PrintProfile = profileName(strings.Trim(val, `"`))
+	case "printer_settings_id":
+		p.m.Settings.PrinterProfile = profileName(strings.Trim(val, `"`))
+	case "layer_height":
+		p.m.Settings.LayerHeight, _ = strconv.ParseFloat(val, 64)
+	case "filament_settings_id":
+		names := list(val)
+		for i := range names {
+			names[i] = profileName(names[i])
+		}
+		p.m.Settings.FilamentProfiles = names
+	case "filament_ids":
+		p.m.Settings.FilamentIDs = list(val)
 	}
+}
+
+// list splits a setting with a value per filament, e.g. GFA00;GFL99 or,
+// for names, "Bambu PLA Basic @BBL A1";"Generic PLA @BBL A1".
+func list(val string) []string {
+	if len(val) >= 2 && strings.HasPrefix(val, `"`) && strings.HasSuffix(val, `"`) {
+		return strings.Split(val[1:len(val)-1], `";"`)
+	}
+	return strings.Split(val, ";")
+}
+
+// profileName drops what Bambu Studio appends to the name of a profile that
+// came with a project, e.g. "Generic PLA(model.3mf)(model.3mf)".
+func profileName(name string) string {
+	for strings.HasSuffix(name, ".3mf)") {
+		i := strings.LastIndexByte(name, '(')
+		if i < 0 {
+			break
+		}
+		name = name[:i]
+	}
+	return strings.TrimSpace(name)
 }
 
 func (p *parser) featureIndex(name string) int {

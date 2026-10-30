@@ -103,7 +103,7 @@ func TestStatusAMSEnvironmentSpoolsAndMapping(t *testing.T) {
 	    "dry_setting":{"dry_duration":-1,"dry_temperature":65},"tray":[
 	    {"id":"0","tray_type":"PETG","tray_id_name":"G02-G0","remain":96,"tray_weight":"1000","total_len":330000,
 	     "nozzle_temp_min":"230","nozzle_temp_max":"260"},
-	    {"id":"1","tray_type":"PETG-CF","tray_id_name":"","remain":-1,"remain_g":0,"tray_weight":"0"},
+	    {"id":"1","tray_type":"PETG-CF","tray_id_name":"","tray_info_idx":"P3f82f72","remain":-1,"remain_g":0,"tray_weight":"0"},
 	    {"id":"2","tray_type":"PLA","tray_id_name":"A00-K0","remain":50,"remain_g":420}]}]}}}`
 	if err := json.Unmarshal([]byte(msg), &state); err != nil {
 		t.Fatal(err)
@@ -121,7 +121,7 @@ func TestStatusAMSEnvironmentSpoolsAndMapping(t *testing.T) {
 	if !tr[0].Bambu || tr[0].RemainG != 960 || tr[0].RemainM != 317 || tr[0].TempMin != 230 || tr[0].TempMax != 260 {
 		t.Errorf("Bambu spool = %+v", tr[0])
 	}
-	if tr[1].Bambu || tr[1].RemainG != -1 || tr[1].RemainM != -1 {
+	if tr[1].Bambu || tr[1].RemainG != -1 || tr[1].RemainM != -1 || tr[1].ProfileID != "P3f82f72" {
 		t.Errorf("third-party spool = %+v", tr[1])
 	}
 	if tr[2].RemainG != 420 { // as reported, not from a weight

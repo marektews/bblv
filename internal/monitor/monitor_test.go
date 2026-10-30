@@ -2,12 +2,15 @@ package monitor
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/marektews/bblv/internal/config"
+	"github.com/marektews/bblv/internal/gcode"
 	"github.com/marektews/bblv/internal/printer"
+	"github.com/marektews/bblv/internal/printjob"
 )
 
 func eventually(t *testing.T, cond func() bool) {
@@ -121,6 +124,46 @@ func TestCameraErrorFromReport(t *testing.T) {
 		if got := p.info().CameraError; got != tc.want {
 			t.Errorf("%s ffmpeg=%q liveView=%q: cameraError = %q, want %q", tc.model, tc.ffmpeg, tc.liveView, got, tc.want)
 		}
+	}
+}
+
+func TestFilamentNamesFromPrintFiles(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "filaments.json")
+	m := New(nil, "")
+	if err := m.KeepFilamentNames(path); err != nil {
+		t.Fatal(err)
+	}
+	p := newPrinter(m, "p", "", "A1", nil)
+	p.status.AMS = []printer.AMS{{ID: 0, Trays: []printer.Tray{{ID: 0, ProfileID: "P3f5ea18"}, {ID: 1, ProfileID: "GFL99"}}}}
+	p.status.External = &printer.Tray{ProfileID: "GFA00"}
+	m.printers = append(m.printers, p)
+	events, unsubscribe := m.Subscribe()
+	defer unsubscribe()
+
+	p.upload(&printjob.Result{Settings: &gcode.Settings{
+		FilamentIDs:      []string{"P3f5ea18", "P3f5ea18", "GFA00"},
+		FilamentProfiles: []string{"Tinmorry PETG ECO @Bambu Lab A1 0.4 nozzle", "Tinmorry PETG ECO @Bambu Lab A1 0.4 nozzle-1", "Bambu PLA Basic @BBL A1"},
+	}})
+	if n := len(events); n != 2 {
+		t.Fatalf("%d events, want the upload and the newly named spools", n)
+	}
+	info := p.info()
+	trays := info.Status.AMS[0].Trays
+	if trays[0].Profile != "Tinmorry PETG ECO @Bambu Lab A1 0.4 nozzle" || trays[1].Profile != "" || info.Status.External.Profile != "Bambu PLA Basic @BBL A1" {
+		t.Fatalf("profiles = %q, %q, external %q", trays[0].Profile, trays[1].Profile, info.Status.External.Profile)
+	}
+	if p.status.AMS[0].Trays[0].Profile != "" || p.status.External.Profile != "" {
+		t.Fatal("naming the spools changed the status of the printer")
+	}
+
+	// Names already known change nothing; a restart loads them from the file.
+	m.learnFilaments(&gcode.Settings{FilamentIDs: []string{"GFA00"}, FilamentProfiles: []string{"Bambu PLA Basic @BBL A1"}})
+	if n := len(events); n != 2 {
+		t.Fatalf("%d events after learning known names", n)
+	}
+	var f filamentNames
+	if err := f.load(path); err != nil || f.names["P3f5ea18"] != "Tinmorry PETG ECO @Bambu Lab A1 0.4 nozzle" || len(f.names) != 2 {
+		t.Fatalf("loaded %v, %v", f.names, err)
 	}
 }
 

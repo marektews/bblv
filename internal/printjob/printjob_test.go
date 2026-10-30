@@ -176,7 +176,7 @@ func TestCachedUsage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := &gcode.Model{UsedG: 235.3, UsedM: 77.03}
+	m := &gcode.Model{UsedG: 235.3, UsedM: 77.03, Settings: gcode.Settings{PrintProfile: "0.20mm Standard @BBL A1"}}
 	if _, err = save(store, "k", m, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -184,11 +184,20 @@ func TestCachedUsage(t *testing.T) {
 	if !ok || r.Usage == nil || r.Usage.Grams != 235.3 || r.Usage.Meters != 77.03 {
 		t.Fatalf("cached = %+v, %v", r, ok)
 	}
-	// Entries of older versions have no usage file and are parsed again.
+	if r.Settings == nil || r.Settings.PrintProfile != "0.20mm Standard @BBL A1" {
+		t.Fatalf("cached settings = %+v", r.Settings)
+	}
+	// Entries of older versions, without details or with only the usage, are parsed again.
 	if _, err = store.Put("old", ".bin", m.Encode); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok = cached(store, "old"); ok {
-		t.Fatal("entry without usage counted as cached")
+		t.Fatal("entry without details counted as cached")
+	}
+	if _, err = store.Put("old", ".json", func(w io.Writer) error { _, werr := io.WriteString(w, `{"grams":235.3}`); return werr }); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok = cached(store, "old"); ok {
+		t.Fatal("entry with only the usage counted as cached")
 	}
 }

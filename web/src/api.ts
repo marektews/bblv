@@ -12,6 +12,7 @@ export interface Tray {
   tempMin: number // nozzle temperature range in °C, 0 when unknown
   tempMax: number
   bambu: boolean // a Bambu Lab spool identified by its RFID tag
+  profile?: string // filament profile, when a print file named it
 }
 
 export interface AMSUnit {
@@ -71,6 +72,14 @@ export interface Geometry {
   thumbnail: boolean
   error?: string
   usage?: Usage // filament the slicer planned
+  settings?: Settings // slicer profiles
+}
+
+export interface Settings {
+  printProfile?: string // e.g. "0.20mm Standard @BBL A1"
+  printerProfile?: string // e.g. "Bambu Lab A1 0.4 nozzle"
+  layerHeight?: number // mm
+  filamentProfiles?: string[] // indexed by filament number - 1
 }
 
 export interface FilamentUse {

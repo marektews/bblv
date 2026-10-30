@@ -73,6 +73,10 @@ type Tray struct {
 	TempMin int    `json:"tempMin"` // nozzle temperature range in °C, 0 when unknown
 	TempMax int    `json:"tempMax"`
 	Bambu   bool   `json:"bambu"` // a Bambu Lab spool identified by its RFID tag
+	// ProfileID identifies the spool's filament profile (tray_info_idx),
+	// e.g. GFA00; the monitor names it from the print files it has seen.
+	ProfileID string `json:"-"`
+	Profile   string `json:"profile,omitempty"`
 }
 
 // HMS is a single Health Management System entry reported by the printer.
@@ -201,7 +205,7 @@ func trayFrom(t map[string]any) Tray {
 		ID: int(num(t, "id")), Type: str(t, "tray_type"), Name: str(t, "tray_sub_brands"),
 		Remain: -1, RemainG: -1, RemainM: -1, WeightG: int(num(t, "tray_weight")),
 		TempMin: int(num(t, "nozzle_temp_min")), TempMax: int(num(t, "nozzle_temp_max")),
-		Bambu: str(t, "tray_id_name") != "",
+		Bambu: str(t, "tray_id_name") != "", ProfileID: str(t, "tray_info_idx"),
 	}
 	if c := str(t, "tray_color"); len(c) >= 6 {
 		tray.Color = "#" + c[:6]

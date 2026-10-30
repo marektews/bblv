@@ -41,6 +41,13 @@ export function amsName(unit: number): string {
   return unit >= 128 ? `HT${unit - 127}` : String.fromCharCode(65 + unit)
 }
 
+// profileName shortens a slicer profile name by the printer it is for,
+// e.g. "Bambu PLA Basic @BBL A1" to "Bambu PLA Basic".
+export function profileName(name = ''): string {
+  const i = name.indexOf(' @')
+  return i > 0 ? name.slice(0, i) : name
+}
+
 // slotLabel names an AMS slot (unit*4+slot) like the printer screen: 1-4, or A1-D4 with several units.
 export function slotLabel(index: number, units: number): string {
   const unit = Math.floor(index / 4)

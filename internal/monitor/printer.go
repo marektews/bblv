@@ -109,6 +109,7 @@ func (p *Printer) infoLocked() Info {
 	if len(info.Geometry.AMSMapping) == 0 {
 		info.Geometry.AMSMapping = p.status.AMSMapping
 	}
+	info.Status.AMS, info.Status.External = p.m.filaments.nameTrays(p.status.AMS, p.status.External)
 	return info
 }
 
@@ -189,6 +190,8 @@ func (p *Printer) nextJob(s printer.Status) *job {
 func (p *Printer) fetch(j job) {
 	g := p.fetcher(j)
 	g.Subtask = j.subtask
+	// Also when the print has changed meanwhile, its profiles name spools.
+	defer p.m.learnFilaments(g.Settings)
 	p.mu.Lock()
 	p.fetching = false
 	if p.job != j.id || p.geom.Uploaded {
@@ -242,6 +245,7 @@ func (p *Printer) upload(res *printjob.Result) {
 	info := p.infoLocked()
 	p.mu.Unlock()
 	p.publish(info)
+	p.m.learnFilaments(res.Settings)
 }
 
 // source delivers status updates of one printer.
