@@ -2,6 +2,7 @@ package recording
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -26,6 +27,16 @@ func TestSanitizerRemovesIdentifiers(t *testing.T) {
 	}
 	if !strings.Contains(out, `"tray_type":"PLA"`) || !strings.Contains(out, `"sw_ver":"01.08.01.00"`) {
 		t.Errorf("useful values removed: %s", out)
+	}
+}
+
+func TestSanitizerReplacesEachSecretOnceLongestFirst(t *testing.T) {
+	s := NewSanitizer("ABC123", "XABC123X", "ABC123", "ABC123")
+	if want := []string{"XABC123X", "ABC123"}; !slices.Equal(s.secrets, want) {
+		t.Fatalf("secrets = %q, want %q", s.secrets, want)
+	}
+	if got := s.text("XABC123X and ABC123"); got != "SERIAL and SERIAL" {
+		t.Fatalf("text = %q", got)
 	}
 }
 

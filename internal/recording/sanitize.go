@@ -2,7 +2,9 @@ package recording
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
+	"slices"
 	"strings"
 )
 
@@ -17,14 +19,19 @@ type Sanitizer struct {
 	secrets []string // e.g. serial numbers, replaced wherever they occur
 }
 
-// NewSanitizer returns a sanitizer that also replaces the given strings.
+// NewSanitizer returns a sanitizer that also replaces the given strings,
+// each once and the longest first, so that replacing one never leaves a part
+// of a longer one containing it.
 func NewSanitizer(secrets ...string) *Sanitizer {
 	s := &Sanitizer{}
+	seen := map[string]bool{}
 	for _, v := range secrets {
-		if len(v) >= 6 {
+		if len(v) >= 6 && !seen[v] {
+			seen[v] = true
 			s.secrets = append(s.secrets, v)
 		}
 	}
+	slices.SortFunc(s.secrets, func(a, b string) int { return cmp.Or(cmp.Compare(len(b), len(a)), strings.Compare(a, b)) })
 	return s
 }
 
