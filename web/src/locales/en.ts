@@ -66,6 +66,7 @@ const en = {
     lanLiveView: 'LAN live view',
     liveViewOn: 'enabled',
     liveViewOff: 'disabled',
+    usage: 'Filament use',
     humidity: 'Humidity in the AMS',
     amsTemp: 'Temperature in the AMS',
     drying: 'Drying, {time} left',

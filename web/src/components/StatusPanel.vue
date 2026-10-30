@@ -33,6 +33,12 @@ const sdCard = computed(() => {
   return free ? `${t('status.sdYes')}, ${free}` : t('status.sdYes')
 })
 
+// Filament the slicer planned for the print.
+const usage = computed(() => {
+  const u = props.printer.geometry.usage
+  return u ? [amount(u.grams, 'g'), u.meters > 0 ? amount(u.meters, 'm') : ''].filter(Boolean).join(' · ') : ''
+})
+
 interface AMSEnv {
   key: string
   label: string
@@ -150,6 +156,10 @@ const slots = computed<Slot[]>(() => {
         <el-descriptions-item v-if="printer.geometry.plate">
           <template #label><fa-icon icon="clone" class="ic" />{{ t('status.plate') }}</template>
           {{ printer.geometry.plate }}
+        </el-descriptions-item>
+        <el-descriptions-item v-if="usage">
+          <template #label><fa-icon icon="weight-hanging" class="ic" />{{ t('status.usage') }}</template>
+          {{ usage }}
         </el-descriptions-item>
         <el-descriptions-item>
           <template #label><fa-icon icon="gauge" class="ic" />{{ t('status.speed') }}</template>

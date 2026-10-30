@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -155,6 +156,29 @@ type Result struct {
 	Geometry  string       // encoded geometry
 	Thumbnail string       // plate thumbnail (PNG), "" when unavailable
 	Model     *gcode.Model // nil when the geometry came from the cache
+	Usage     *Usage       // nil when the files do not tell
+}
+
+// Usage is the filament the slicer planned for the print.
+type Usage struct {
+	Grams     float64             `json:"grams"`
+	Meters    float64             `json:"meters"`
+	Filaments []gcode.FilamentUse `json:"filaments,omitempty"` // only from a .3mf
+}
+
+func usageOf(m *gcode.Model) *Usage {
+	u := &Usage{Grams: m.UsedG, Meters: m.UsedM, Filaments: m.Usage}
+	if len(m.Usage) > 0 {
+		u.Grams, u.Meters = 0, 0
+		for _, f := range m.Usage {
+			u.Grams += f.Grams
+			u.Meters += f.Meters
+		}
+	}
+	if u.Grams == 0 && u.Meters == 0 {
+		return nil
+	}
+	return u
 }
 
 // Build returns cached geometry for the print, creating it when needed. The
@@ -216,19 +240,33 @@ func BuildFile(name string, plate int, store *cache.Cache) (*Result, error) {
 	return save(store, key, model, png)
 }
 
+// cached returns a print parsed before. Entries cached without the filament
+// usage, by older versions, are parsed again.
 func cached(store *cache.Cache, key string) (*Result, bool) {
 	p, ok := store.Get(key, ".bin")
 	if !ok {
 		return nil, false
 	}
-	thumb, _ := store.Get(key, ".png")
-	return &Result{Key: key, Geometry: p, Thumbnail: thumb}, true
+	usage, ok := store.Get(key, ".json")
+	if !ok {
+		return nil, false
+	}
+	r := &Result{Key: key, Geometry: p}
+	r.Thumbnail, _ = store.Get(key, ".png")
+	if b, err := os.ReadFile(usage); err == nil {
+		json.Unmarshal(b, &r.Usage)
+	}
+	return r, true
 }
 
 func save(store *cache.Cache, key string, model *gcode.Model, png []byte) (*Result, error) {
-	r := &Result{Key: key, Model: model}
+	r := &Result{Key: key, Model: model, Usage: usageOf(model)}
 	var err error
 	if r.Geometry, err = store.Put(key, ".bin", model.Encode); err != nil {
+		return nil, err
+	}
+	// Written also when empty: its presence marks an entry with the usage known.
+	if _, err = store.Put(key, ".json", func(w io.Writer) error { return json.NewEncoder(w).Encode(r.Usage) }); err != nil {
 		return nil, err
 	}
 	if png != nil {
@@ -320,7 +358,48 @@ func parse3MF(zr *zip.Reader, plate int) (*gcode.Model, []byte, error) {
 	if err != nil {
 		return nil, png, err
 	}
+	if info, zerr := readZip(zr, "Metadata/slice_info.config"); zerr == nil {
+		m.Usage = plateUsage(info, plate)
+	}
 	return m, png, nil
+}
+
+// sliceInfo is the part of Metadata/slice_info.config that lists, for every
+// sliced plate, the filaments it uses.
+type sliceInfo struct {
+	Plates []struct {
+		Metadata []struct {
+			Key   string `xml:"key,attr"`
+			Value string `xml:"value,attr"`
+		} `xml:"metadata"`
+		Filaments []struct {
+			ID    int     `xml:"id,attr"`
+			Type  string  `xml:"type,attr"`
+			Color string  `xml:"color,attr"`
+			UsedM float64 `xml:"used_m,attr"`
+			UsedG float64 `xml:"used_g,attr"`
+		} `xml:"filament"`
+	} `xml:"plate"`
+}
+
+func plateUsage(data []byte, plate int) []gcode.FilamentUse {
+	var info sliceInfo
+	if xml.Unmarshal(data, &info) != nil {
+		return nil
+	}
+	for _, p := range info.Plates {
+		for _, md := range p.Metadata {
+			if md.Key != "index" || md.Value != strconv.Itoa(plate) {
+				continue
+			}
+			var out []gcode.FilamentUse
+			for _, f := range p.Filaments {
+				out = append(out, gcode.FilamentUse{Filament: f.ID, Type: f.Type, Color: f.Color, Grams: f.UsedG, Meters: f.UsedM})
+			}
+			return out
+		}
+	}
+	return nil
 }
 
 func readZip(zr *zip.Reader, name string) ([]byte, error) {

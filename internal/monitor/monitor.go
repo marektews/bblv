@@ -40,11 +40,13 @@ type Geometry struct {
 	Thumbnail  bool   `json:"thumbnail"`
 	Error      string `json:"error,omitempty"`
 
+	Usage *printjob.Usage `json:"usage,omitempty"` // filament the slicer planned
+
 	path, thumbPath string
 }
 
 func ready(res *printjob.Result) Geometry {
-	return Geometry{State: GeometryReady, Key: res.Key, Thumbnail: res.Thumbnail != "", path: res.Geometry, thumbPath: res.Thumbnail}
+	return Geometry{State: GeometryReady, Key: res.Key, Thumbnail: res.Thumbnail != "", Usage: res.Usage, path: res.Geometry, thumbPath: res.Thumbnail}
 }
 
 // Info is the public view of a printer.

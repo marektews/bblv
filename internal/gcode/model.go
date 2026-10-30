@@ -36,6 +36,20 @@ type Model struct {
 	Points    []Point
 	Bounds    [6]float32 // min x, y, z, max x, y, z
 	Segments  int        // extrusion segments before simplification
+
+	// Filament the slicer planned: totals from the G-code header and, from a
+	// .3mf, each filament used; zero and nil when unknown.
+	UsedG, UsedM float64
+	Usage        []FilamentUse
+}
+
+// FilamentUse is how much of one filament the slicer planned for the print.
+type FilamentUse struct {
+	Filament int     `json:"filament"` // 1-based, as numbered in the slicer
+	Type     string  `json:"type"`
+	Color    string  `json:"color"` // #RRGGBB
+	Grams    float64 `json:"grams"`
+	Meters   float64 `json:"meters"`
 }
 
 // Binary format, little endian:

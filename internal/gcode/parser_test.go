@@ -160,3 +160,15 @@ func TestEncode(t *testing.T) {
 		t.Fatalf("last point encoded as %v %v %v", f(base), f(base+5), f(base+6))
 	}
 }
+
+func TestParseFilamentTotals(t *testing.T) {
+	header := "; HEADER_BLOCK_START\n; total filament length [mm] : 77029.90\n; total filament volume [cm^3] : 185278.63\n" +
+		"; total filament weight [g] : 235.30\n; HEADER_BLOCK_END\n"
+	m, err := Parse(strings.NewReader(header + sample))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.UsedG != 235.30 || math.Abs(m.UsedM-77.0299) > 1e-9 {
+		t.Fatalf("used = %v g, %v m", m.UsedG, m.UsedM)
+	}
+}

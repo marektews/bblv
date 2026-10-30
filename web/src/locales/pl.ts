@@ -68,6 +68,7 @@ const pl: Messages = {
     lanLiveView: 'Podgląd w LAN',
     liveViewOn: 'włączony',
     liveViewOff: 'wyłączony',
+    usage: 'Zużycie filamentu',
     humidity: 'Wilgotność w AMS',
     amsTemp: 'Temperatura w AMS',
     drying: 'Suszenie, pozostało {time}',

@@ -11,6 +11,9 @@ import (
 	"time"
 
 	"github.com/jlaffaye/ftp"
+
+	"github.com/marektews/bblv/internal/cache"
+	"github.com/marektews/bblv/internal/gcode"
 )
 
 const plateGcode = "; CHANGE_LAYER\n; LAYER_HEIGHT: 0.2\n; LINE_WIDTH: 0.4\nG90\nM83\nG1 X0 Y0 Z0.2\nG1 X10 E1\n"
@@ -131,5 +134,61 @@ func TestFind(t *testing.T) {
 	}
 	if _, err := Find(fakeCard{"Other.gcode.3mf": "3mf"}, "Zaslepka", "/data/Metadata/plate_1.gcode"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("missing print: err = %v", err)
+	}
+}
+
+const sliceInfoXML = `<?xml version="1.0" encoding="UTF-8"?>
+<config>
+  <plate>
+    <metadata key="index" value="1"/>
+    <filament id="1" type="PLA" color="#FFFFFF" used_m="1.5" used_g="4.5"/>
+  </plate>
+  <plate>
+    <metadata key="index" value="2"/>
+    <filament id="1" type="PLA" color="#FFFFFF" used_m="2" used_g="6"/>
+    <filament id="3" type="PETG" color="#161616" used_m="10.25" used_g="30.5"/>
+  </plate>
+</config>`
+
+func TestParse3MFReadsThePlateUsage(t *testing.T) {
+	zr := make3MF(t, map[string]string{
+		"Metadata/plate_2.gcode":     plateGcode,
+		"Metadata/slice_info.config": sliceInfoXML,
+	})
+	m, _, err := parse3MF(zr, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []gcode.FilamentUse{
+		{Filament: 1, Type: "PLA", Color: "#FFFFFF", Grams: 6, Meters: 2},
+		{Filament: 3, Type: "PETG", Color: "#161616", Grams: 30.5, Meters: 10.25},
+	}
+	if !reflect.DeepEqual(m.Usage, want) {
+		t.Fatalf("usage = %+v", m.Usage)
+	}
+	if u := usageOf(m); u.Grams != 36.5 || u.Meters != 12.25 {
+		t.Fatalf("totals = %+v", u)
+	}
+}
+
+func TestCachedUsage(t *testing.T) {
+	store, err := cache.Open(t.TempDir(), cache.DefaultLimit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := &gcode.Model{UsedG: 235.3, UsedM: 77.03}
+	if _, err = save(store, "k", m, nil); err != nil {
+		t.Fatal(err)
+	}
+	r, ok := cached(store, "k")
+	if !ok || r.Usage == nil || r.Usage.Grams != 235.3 || r.Usage.Meters != 77.03 {
+		t.Fatalf("cached = %+v, %v", r, ok)
+	}
+	// Entries of older versions have no usage file and are parsed again.
+	if _, err = store.Put("old", ".bin", m.Encode); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok = cached(store, "old"); ok {
+		t.Fatal("entry without usage counted as cached")
 	}
 }

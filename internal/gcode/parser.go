@@ -120,6 +120,12 @@ func (p *parser) comment(c string) {
 	case "MACHINE_END_GCODE_START":
 		p.closeLayer()
 		p.ended = true
+	case "total filament weight [g]": // Bambu Studio header
+		p.m.UsedG, _ = strconv.ParseFloat(val, 64)
+	case "total filament length [mm]":
+		if v, err := strconv.ParseFloat(val, 64); err == nil {
+			p.m.UsedM = v / 1000
+		}
 	default:
 		// Slicer settings look like "filament_colour = #FFFFFF;#000000".
 		if k, v, ok := strings.Cut(c, " = "); ok {

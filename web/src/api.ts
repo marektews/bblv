@@ -70,6 +70,21 @@ export interface Geometry {
   uploaded?: boolean
   thumbnail: boolean
   error?: string
+  usage?: Usage // filament the slicer planned
+}
+
+export interface FilamentUse {
+  filament: number // 1-based, as numbered in the slicer
+  type: string
+  color: string
+  grams: number
+  meters: number
+}
+
+export interface Usage {
+  grams: number
+  meters: number
+  filaments?: FilamentUse[] // only from a .3mf
 }
 
 export interface PrinterInfo {
