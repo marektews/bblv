@@ -67,34 +67,52 @@ func stream6000(ctx context.Context, addr, accessCode string, frame func([]byte)
 			return err
 		}
 		if !bytes.HasPrefix(img, soi) {
+			// Printers without this stream answer the login with a status
+			// packet such as ff ff ff ff 00 00 00 00 and close the connection.
+			if size == 8 {
+				return fmt.Errorf("camera refused the stream (status %d)", int32(binary.LittleEndian.Uint32(img)))
+			}
 			return errors.New("frame is not a JPEG image")
 		}
 		frame(img)
 	}
 }
 
-// FFmpeg streams the RTSP camera of X1 and H2 printers through ffmpeg,
-// which converts it to JPEG frames at about two per second.
+// FFmpeg streams the RTSP camera of X1, X2, H2 and P2 printers through
+// ffmpeg, which converts it to JPEG frames at about two per second.
 func FFmpeg(ffmpeg, host, accessCode string) Source {
 	return func(ctx context.Context, frame func([]byte)) error {
-		u := url.URL{Scheme: "rtsps", User: url.UserPassword("bblp", accessCode), Host: net.JoinHostPort(host, "322"), Path: "/streaming/live/1"}
-		cmd := exec.CommandContext(ctx, ffmpeg, "-loglevel", "error", "-rtsp_transport", "tcp", "-i", u.String(),
-			"-an", "-r", "2", "-f", "image2pipe", "-c:v", "mjpeg", "-q:v", "5", "pipe:1")
-		out, err := cmd.StdoutPipe()
-		if err != nil {
-			return err
-		}
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
-		if err := cmd.Start(); err != nil {
-			return err
-		}
-		err = splitJPEG(out, frame)
-		if werr := cmd.Wait(); werr != nil && ctx.Err() == nil {
-			return fmt.Errorf("ffmpeg: %w: %s", werr, bytes.TrimSpace(stderr.Bytes()))
-		}
+		return streamRTSP(ctx, ffmpeg, net.JoinHostPort(host, "322"), accessCode, frame)
+	}
+}
+
+func streamRTSP(ctx context.Context, ffmpeg, addr, accessCode string, frame func([]byte)) error {
+	// The printer opens the RTSP port only with LAN live view enabled;
+	// checking it first gives a clearer error than ffmpeg would.
+	d := net.Dialer{Timeout: 10 * time.Second}
+	conn, err := d.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return fmt.Errorf("%w (is LAN live view enabled in the printer's settings?)", err)
+	}
+	conn.Close()
+
+	u := url.URL{Scheme: "rtsps", User: url.UserPassword("bblp", accessCode), Host: addr, Path: "/streaming/live/1"}
+	cmd := exec.CommandContext(ctx, ffmpeg, "-loglevel", "error", "-rtsp_transport", "tcp", "-i", u.String(),
+		"-an", "-r", "2", "-f", "image2pipe", "-c:v", "mjpeg", "-q:v", "5", "pipe:1")
+	out, err := cmd.StdoutPipe()
+	if err != nil {
 		return err
 	}
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	err = splitJPEG(out, frame)
+	if werr := cmd.Wait(); werr != nil && ctx.Err() == nil {
+		return fmt.Errorf("ffmpeg: %w: %s", werr, bytes.TrimSpace(stderr.Bytes()))
+	}
+	return err
 }
 
 var (

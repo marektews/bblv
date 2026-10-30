@@ -9,12 +9,14 @@ import (
 
 // Hub shares one camera stream between all viewers. The source runs while
 // anyone watches and for a grace period after the last viewer leaves; it is
-// restarted after a delay when it fails.
+// restarted after a delay when it fails, doubled up to maxRetry while it
+// keeps failing without delivering a frame.
 type Hub struct {
-	name   string
-	source Source
-	grace  time.Duration
-	retry  time.Duration
+	name     string
+	source   Source
+	grace    time.Duration
+	retry    time.Duration
+	maxRetry time.Duration
 
 	mu     sync.Mutex
 	subs   map[chan []byte]struct{}
@@ -26,7 +28,7 @@ type Hub struct {
 
 // NewHub creates a hub; name identifies the camera in logs.
 func NewHub(name string, source Source) *Hub {
-	return &Hub{name: name, source: source, grace: 10 * time.Second, retry: 5 * time.Second, subs: map[chan []byte]struct{}{}}
+	return &Hub{name: name, source: source, grace: 10 * time.Second, retry: 5 * time.Second, maxRetry: time.Minute, subs: map[chan []byte]struct{}{}}
 }
 
 // Subscribe returns a channel that always holds the newest frame not yet
@@ -88,17 +90,26 @@ func (h *Hub) stopIfIdle() {
 }
 
 func (h *Hub) run(ctx context.Context) {
+	delay := h.retry
 	for {
-		err := h.source(ctx, h.publish)
+		streamed := false
+		err := h.source(ctx, func(img []byte) {
+			streamed = true
+			h.publish(img)
+		})
 		if ctx.Err() != nil {
 			return
 		}
-		slog.Warn("camera stream stopped, reconnecting", "camera", h.name, "in", h.retry, "err", err)
+		if streamed {
+			delay = h.retry
+		}
+		slog.Warn("camera stream stopped, reconnecting", "camera", h.name, "in", delay, "err", err)
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(h.retry):
+		case <-time.After(delay):
 		}
+		delay = min(2*delay, h.maxRetry)
 	}
 }
 

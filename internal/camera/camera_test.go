@@ -11,6 +11,8 @@ import (
 	"encoding/binary"
 	"io"
 	"math/big"
+	"net"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -86,6 +88,45 @@ func TestStream6000(t *testing.T) {
 	if binary.LittleEndian.Uint32(l) != 0x40 || binary.LittleEndian.Uint32(l[4:]) != 0x3000 ||
 		string(bytes.TrimRight(l[16:48], "\x00")) != "bblp" || string(bytes.TrimRight(l[48:80], "\x00")) != "12345678" {
 		t.Fatalf("login packet = %x", l)
+	}
+}
+
+// The X2D and P2S answer the login with a status packet instead of frames.
+func TestStream6000Refused(t *testing.T) {
+	ln, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{Certificates: []tls.Certificate{selfSigned(t)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		io.ReadFull(conn, make([]byte, 80))
+		head := []byte{8, 0, 0, 0, 0x3f, 1, 3, 0, 0, 0, 0, 0, 0x0c, 0, 0, 0}
+		conn.Write(append(head, 0xff, 0xff, 0xff, 0xff, 0, 0, 0, 0))
+	}()
+
+	err = stream6000(context.Background(), ln.Addr().String(), "12345678", func([]byte) { t.Error("unexpected frame") })
+	if err == nil || !strings.Contains(err.Error(), "refused the stream (status -1)") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestStreamRTSPClosedPort(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+
+	// ffmpeg must not be started when the port is closed.
+	err = streamRTSP(context.Background(), "/nonexistent/ffmpeg", addr, "12345678", func([]byte) {})
+	if err == nil || !strings.Contains(err.Error(), "LAN live view") {
+		t.Fatalf("err = %v", err)
 	}
 }
 

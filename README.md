@@ -12,7 +12,7 @@ account needed, works on Windows and Linux (including a Raspberry Pi).
 - **Status**: state and print stage, progress, remaining time and finish
   time, nozzle and bed temperatures, fans, speed profile, AMS slots and the
   external spool, HMS alerts and error codes explained in English or Polish.
-- **Camera** stream (A1 and P1 series; X1 and H2 with ffmpeg installed).
+- **Camera** stream (A1 and P1 series; X1, X2, H2 and P2 with ffmpeg installed).
 - **Several printers** on one dashboard.
 - **Web settings**: printers found in the network are listed automatically;
   access codes can be imported from Bambu Studio.
@@ -30,6 +30,7 @@ the local network in cloud mode, which is all bblv reads.
 | A1 mini, P1P, P1S | experimental: same protocol as the A1, not tested |
 | X1, X1C, X1E | experimental; the camera needs `ffmpeg` in `PATH` |
 | H2D, H2S | experimental; the camera needs `ffmpeg`; dual nozzles are not shown separately |
+| X2D, P2S | experimental; the camera needs `ffmpeg` and LAN live view enabled on the printer |
 
 If you own an experimental model, a recording of a print helps a lot — see
 [Recording a print](#recording-a-print).
@@ -90,7 +91,8 @@ Open **Settings** in the web UI.
    exposing bblv to the internet.
 
 The printer must be reachable from the server on TCP ports 8883 (MQTT),
-990 (FTPS) and 6000 (camera of the A1/P1) or 322 (RTSP camera of the X1/H2).
+990 (FTPS) and 6000 (camera of the A1/P1) or 322 (RTSP camera of the X1/X2/H2/P2,
+open only with LAN live view enabled on the printer).
 
 ## How the 3D view gets the G-code
 
