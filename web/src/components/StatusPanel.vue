@@ -17,6 +17,9 @@ const hasChamberFans = computed(() => !props.printer.model.toUpperCase().startsW
 const speed = computed(() => (te(`speed.${s.value.speedLevel}`) ? t(`speed.${s.value.speedLevel}`) : '—'))
 const stage = computed(() => stageName(s.value.stage, locale.value))
 
+// The printer reports the signal as e.g. "-42dBm".
+const wifi = computed(() => s.value.wifiSignal.replace(/(\d)\s*dBm$/i, '$1 dBm') || '—')
+
 // The printer reports the card size in KB, and only with an RTSP camera.
 const gb = (kb: number) => `${(kb / 1024 / 1024).toLocaleString(locale.value, { maximumFractionDigits: 1 })} GB`
 const sdCard = computed(() => {
@@ -174,7 +177,7 @@ const slots = computed<Slot[]>(() => {
       <el-descriptions :column="1" size="small" border>
         <el-descriptions-item>
           <template #label><fa-icon icon="wifi" class="ic" />{{ t('status.wifi') }}</template>
-          {{ s.wifiSignal || '—' }}
+          {{ wifi }}
         </el-descriptions-item>
         <el-descriptions-item>
           <template #label><fa-icon icon="microchip" class="ic" />{{ t('status.firmware') }}</template>
