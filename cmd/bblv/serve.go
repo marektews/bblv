@@ -22,6 +22,7 @@ import (
 	"github.com/marektews/bblv/internal/discovery"
 	"github.com/marektews/bblv/internal/monitor"
 	"github.com/marektews/bblv/internal/printjob"
+	"github.com/marektews/bblv/internal/relocate"
 	"github.com/marektews/bblv/internal/server"
 )
 
@@ -95,6 +96,10 @@ func serve(ctx context.Context, o serveOptions) error {
 	defer cancel()
 	go mon.Run(ctx)
 	disc := discovery.Listen(ctx)
+	if o.replay == "" {
+		// Follows printers that got another address from DHCP.
+		go relocate.New(cfgStore, mon, disc, filepath.Join(o.dataDir, "printer-ca.pem")).Run(ctx)
+	}
 
 	srv := &http.Server{
 		Addr:              o.listen,
