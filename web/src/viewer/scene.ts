@@ -204,10 +204,17 @@ export class PrintScene {
       this.root.remove(this.bed)
       this.setBedNone()
     }
-    const v: number[] = []
+    // Lines every 16 mm and along the far edges, which need not be on that grid.
     const step = 16
-    for (let x = 0; x <= width; x += step) v.push(x, 0, 0, x, depth, 0)
-    for (let y = 0; y <= depth; y += step) v.push(0, y, 0, width, y, 0)
+    const lines = (size: number) => {
+      const at: number[] = []
+      for (let p = 0; p < size; p += step) at.push(p)
+      at.push(size)
+      return at
+    }
+    const v: number[] = []
+    for (const x of lines(width)) v.push(x, 0, 0, x, depth, 0)
+    for (const y of lines(depth)) v.push(0, y, 0, width, y, 0)
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3))
     this.bed = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0x888888, transparent: true, opacity: 0.35 }))
