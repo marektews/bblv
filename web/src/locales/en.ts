@@ -3,6 +3,7 @@ const en = {
     disconnected: 'No connection to the server',
     settings: 'Settings',
     logout: 'Log out',
+    groupByState: 'Group by state',
   },
   login: {
     title: 'Bambu Live View',

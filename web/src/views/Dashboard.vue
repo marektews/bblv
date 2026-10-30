@@ -4,13 +4,17 @@ import { useI18n } from 'vue-i18n'
 import type { PrinterInfo } from '../api'
 import PrinterTile from '../components/PrinterTile.vue'
 import { STATE_ICONS, STATE_ORDER, STATE_TYPES, stateKey } from '../format'
-import { connected, printers } from '../store'
+import { connected, groupByState, printers } from '../store'
 
 const { t, locale } = useI18n()
 
-// Printers grouped by state in STATE_ORDER, sorted by name within a group.
+// Printers sorted by name and, when groupByState is on, grouped by state in
+// STATE_ORDER; otherwise a single group.
 const groups = computed(() => {
   const collator = new Intl.Collator(locale.value, { numeric: true, sensitivity: 'base' })
+  if (!groupByState.value) {
+    return [{ key: 'all', printers: [...printers.value].sort((a, b) => collator.compare(a.name, b.name)) }]
+  }
   const byState = new Map<string, PrinterInfo[]>()
   for (const p of printers.value) {
     const key = stateKey(p)
@@ -31,7 +35,7 @@ const groups = computed(() => {
 <template>
   <el-empty v-if="connected && printers.length === 0" :description="t('dashboard.empty')" />
   <section v-for="g in groups" :key="g.key" class="group">
-    <h2 :class="['group-title', `is-${STATE_TYPES[g.key] ?? 'info'}`]">
+    <h2 v-if="groupByState" :class="['group-title', `is-${STATE_TYPES[g.key] ?? 'info'}`]">
       <fa-icon :icon="STATE_ICONS[g.key]" class="ic" />{{ t(`state.${g.key}`) }}
       <span class="count">{{ g.printers.length }}</span>
     </h2>

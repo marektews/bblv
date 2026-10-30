@@ -3,12 +3,14 @@ import en from 'element-plus/es/locale/lang/en'
 import pl from 'element-plus/es/locale/lang/pl'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { logout } from './api'
 import { setLocale, type Locale } from './i18n'
-import { auth, connected, showLogin } from './store'
+import { auth, connected, groupByState, showLogin } from './store'
 import Login from './views/Login.vue'
 
 const { t, locale } = useI18n()
+const route = useRoute()
 const elementLocale = computed(() => (locale.value === 'pl' ? pl : en))
 
 async function signOut() {
@@ -26,6 +28,7 @@ async function signOut() {
         <fa-icon icon="link-slash" class="ic" />{{ t('app.disconnected') }}
       </el-tag>
       <template v-if="auth.state === 'ok'">
+        <el-switch v-if="route.path === '/'" v-model="groupByState" size="small" :active-text="t('app.groupByState')" />
         <router-link to="/settings" class="nav"><fa-icon icon="gear" class="ic" />{{ t('app.settings') }}</router-link>
         <el-button v-if="auth.required" link size="small" @click="signOut">
           <fa-icon icon="right-from-bracket" class="ic" />{{ t('app.logout') }}

@@ -1,9 +1,28 @@
-import { reactive, ref } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import { getAuth, setUnauthorizedHandler, type PrinterInfo } from './api'
 
 // Printers in configuration order, kept up to date by the server's event stream.
 export const printers = ref<PrinterInfo[]>([])
 export const connected = ref(false)
+
+const GROUP_KEY = 'groupByState'
+function initialGrouping(): boolean {
+  try {
+    return localStorage.getItem(GROUP_KEY) !== '0'
+  } catch {
+    return true
+  }
+}
+
+// groupByState groups the dashboard tiles by printer state; remembered in the browser.
+export const groupByState = ref(initialGrouping())
+watch(groupByState, (v) => {
+  try {
+    localStorage.setItem(GROUP_KEY, v ? '1' : '0')
+  } catch {
+    // Not remembered; the tiles are grouped next time.
+  }
+})
 export const auth = reactive({
   state: 'checking' as 'checking' | 'login' | 'ok',
   required: false, // a password is set

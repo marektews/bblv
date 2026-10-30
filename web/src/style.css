@@ -11,13 +11,19 @@ a {
   text-decoration: none;
 }
 
+/* On narrow screens the controls move to a second row instead of breaking their labels. */
 .app-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px 12px;
   padding: 10px 16px;
   background: var(--el-bg-color);
   border-bottom: 1px solid var(--el-border-color-light);
+}
+
+.app-header > * {
+  white-space: nowrap;
 }
 
 .app-header .brand {

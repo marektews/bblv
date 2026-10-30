@@ -5,6 +5,7 @@ const pl: Messages = {
     disconnected: 'Brak połączenia z serwerem',
     settings: 'Ustawienia',
     logout: 'Wyloguj',
+    groupByState: 'Grupuj wg stanu',
   },
   login: {
     title: 'Bambu Live View',
