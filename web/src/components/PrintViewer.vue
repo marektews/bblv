@@ -54,7 +54,7 @@ const legend = computed<LegendItem[]>(() => {
       label: featureLabel(g.meta.features[f], locale.value as Locale),
     }))
   }
-  // The .bbl file on the SD card maps filaments to AMS slots; reports name the slot in use.
+  // The .bbl file on the SD card or the reports map filaments to AMS slots; reports name the slot in use.
   const s = props.printer.status
   const mapping = props.printer.geometry.amsMapping ?? []
   const live = props.printer.online && ACTIVE_STATES.includes(s.state)

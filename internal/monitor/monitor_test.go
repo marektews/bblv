@@ -123,3 +123,15 @@ func TestCameraErrorFromReport(t *testing.T) {
 		}
 	}
 }
+
+func TestAMSMappingFromReportWithoutBBL(t *testing.T) {
+	p := newPrinter(New(nil, ""), "p", "", "P2S", nil)
+	p.status.AMSMapping = []int{3}
+	if got := p.info().Geometry.AMSMapping; len(got) != 1 || got[0] != 3 {
+		t.Fatalf("mapping = %v, want the reported [3]", got)
+	}
+	p.geom.AMSMapping = []int{1} // from a .bbl file
+	if got := p.info().Geometry.AMSMapping; len(got) != 1 || got[0] != 1 {
+		t.Fatalf("mapping = %v, want the .bbl one", got)
+	}
+}

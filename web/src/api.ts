@@ -6,11 +6,21 @@ export interface Tray {
   name: string
   color: string // #RRGGBB
   remain: number // percent, -1 when unknown
+  remainG: number // grams left, -1 when unknown
+  remainM: number // metres left, -1 when unknown
+  weightG: number // spool weight, 0 when unknown
+  tempMin: number // nozzle temperature range in °C, 0 when unknown
+  tempMax: number
+  bambu: boolean // a Bambu Lab spool identified by its RFID tag
 }
 
 export interface AMSUnit {
   id: number
   trays: Tray[]
+  humidity: number // percent, -1 when unknown
+  temp: number // °C, 0 when unknown
+  dryMin: number // minutes of drying left, 0 when not drying
+  dryTemp: number // °C, 0 when unknown
 }
 
 export interface Fans {

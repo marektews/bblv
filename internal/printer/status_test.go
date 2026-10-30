@@ -2,6 +2,7 @@ package printer
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -92,5 +93,43 @@ func TestStatusSDCardAndLiveView(t *testing.T) {
 		if s.SDCard != tc.sd || s.SDTotalKB != tc.total || s.SDFreeKB != tc.free || s.LANLiveView != tc.liveView {
 			t.Errorf("%s: sd=%v %d/%d liveView=%q", tc.name, s.SDCard, s.SDFreeKB, s.SDTotalKB, s.LANLiveView)
 		}
+	}
+}
+
+func TestStatusAMSEnvironmentSpoolsAndMapping(t *testing.T) {
+	var state map[string]any
+	msg := `{"print":{"mapping":[3,65535,32768,1279],
+	  "ams":{"ams":[{"id":"0","humidity":"2","humidity_raw":"29","temp":"33.2","dry_time":130,
+	    "dry_setting":{"dry_duration":-1,"dry_temperature":65},"tray":[
+	    {"id":"0","tray_type":"PETG","tray_id_name":"G02-G0","remain":96,"tray_weight":"1000","total_len":330000,
+	     "nozzle_temp_min":"230","nozzle_temp_max":"260"},
+	    {"id":"1","tray_type":"PETG-CF","tray_id_name":"","remain":-1,"remain_g":0,"tray_weight":"0"},
+	    {"id":"2","tray_type":"PLA","tray_id_name":"A00-K0","remain":50,"remain_g":420}]}]}}}`
+	if err := json.Unmarshal([]byte(msg), &state); err != nil {
+		t.Fatal(err)
+	}
+	s := statusFrom(state)
+	// ams_id<<8 | slot: AMS 0 slot 3, unused, AMS HT 128 slot 0, AMS 4 slot 255 (invalid).
+	if want := []int{3, -1, 512, -1}; !reflect.DeepEqual(s.AMSMapping, want) {
+		t.Errorf("mapping = %v, want %v", s.AMSMapping, want)
+	}
+	u := s.AMS[0]
+	if u.Humidity != 29 || u.Temp != 33.2 || u.DryMin != 130 || u.DryTemp != 65 {
+		t.Errorf("unit = %+v", u)
+	}
+	tr := u.Trays
+	if !tr[0].Bambu || tr[0].RemainG != 960 || tr[0].RemainM != 317 || tr[0].TempMin != 230 || tr[0].TempMax != 260 {
+		t.Errorf("Bambu spool = %+v", tr[0])
+	}
+	if tr[1].Bambu || tr[1].RemainG != -1 || tr[1].RemainM != -1 {
+		t.Errorf("third-party spool = %+v", tr[1])
+	}
+	if tr[2].RemainG != 420 { // as reported, not from a weight
+		t.Errorf("remain_g = %d", tr[2].RemainG)
+	}
+	var noSensor map[string]any
+	json.Unmarshal([]byte(`{"print":{"ams":{"ams":[{"id":"0","tray":[]}]}}}`), &noSensor)
+	if h := statusFrom(noSensor).AMS[0].Humidity; h != -1 {
+		t.Errorf("humidity without a sensor = %d", h)
 	}
 }

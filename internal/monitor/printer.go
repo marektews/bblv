@@ -105,6 +105,10 @@ func (p *Printer) infoLocked() Info {
 	if err := p.cameraErrLocked(); err != nil {
 		info.CameraError, info.CameraDetail = camera.Code(err), err.Error()
 	}
+	// Printers without .bbl files on the SD card report the mapping instead.
+	if len(info.Geometry.AMSMapping) == 0 {
+		info.Geometry.AMSMapping = p.status.AMSMapping
+	}
 	return info
 }
 

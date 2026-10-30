@@ -23,6 +23,10 @@ export function useFormat() {
     temp(current: number, target: number): string {
       return target > 0 ? `${Math.round(current)} / ${Math.round(target)} °C` : `${Math.round(current)} °C`
     },
+    // amount formats a quantity with at most one decimal, e.g. "235,3 g".
+    amount(value: number, unit: string): string {
+      return `${value.toLocaleString(locale.value, { maximumFractionDigits: 1 })} ${unit}`
+    },
   }
 }
 
@@ -32,10 +36,19 @@ export function errorCode(code: number): string {
   return `${hex.slice(0, 4)}_${hex.slice(4)}`
 }
 
+// amsName names an AMS unit: A-D, or HT1… for the one-slot AMS HT, whose ids start at 128.
+export function amsName(unit: number): string {
+  return unit >= 128 ? `HT${unit - 127}` : String.fromCharCode(65 + unit)
+}
+
 // slotLabel names an AMS slot (unit*4+slot) like the printer screen: 1-4, or A1-D4 with several units.
 export function slotLabel(index: number, units: number): string {
+  const unit = Math.floor(index / 4)
+  if (unit >= 128) {
+    return amsName(unit)
+  }
   const n = (index % 4) + 1
-  return units > 1 ? `${String.fromCharCode(65 + Math.floor(index / 4))}${n}` : `${n}`
+  return units > 1 ? `${amsName(unit)}${n}` : `${n}`
 }
 
 // trayAt returns the spool in an AMS slot, or the external spool for EXTERNAL_TRAY.

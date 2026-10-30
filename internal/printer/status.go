@@ -37,6 +37,9 @@ type Status struct {
 	// camera, which report ipcam.rtsp_url, and "" for the others.
 	LANLiveView string `json:"lanLiveView"`
 	RTSPURL     string `json:"-"` // ipcam.rtsp_url: "disable" or the stream address
+	// AMSMapping maps the print's filaments to AMS slots (unit*4+slot) on
+	// printers that report it; the others keep it in the .bbl file.
+	AMSMapping []int `json:"-"`
 }
 
 // Fans holds fan speeds in percent.
@@ -49,17 +52,27 @@ type Fans struct {
 
 // AMS is one AMS unit.
 type AMS struct {
-	ID    int    `json:"id"`
-	Trays []Tray `json:"trays"`
+	ID       int     `json:"id"`
+	Trays    []Tray  `json:"trays"`
+	Humidity int     `json:"humidity"` // percent, -1 when unknown
+	Temp     float64 `json:"temp"`     // °C, 0 when unknown
+	DryMin   int     `json:"dryMin"`   // minutes of drying left, 0 when not drying
+	DryTemp  int     `json:"dryTemp"`  // drying temperature in °C, 0 when unknown
 }
 
 // Tray is one filament slot; Type is empty for an empty slot.
 type Tray struct {
-	ID     int    `json:"id"`
-	Type   string `json:"type"`
-	Name   string `json:"name"`
-	Color  string `json:"color"`  // #RRGGBB
-	Remain int    `json:"remain"` // percent, -1 when unknown
+	ID      int    `json:"id"`
+	Type    string `json:"type"`
+	Name    string `json:"name"`
+	Color   string `json:"color"`   // #RRGGBB
+	Remain  int    `json:"remain"`  // percent, -1 when unknown
+	RemainG int    `json:"remainG"` // grams left, -1 when unknown
+	RemainM int    `json:"remainM"` // metres left, -1 when unknown
+	WeightG int    `json:"weightG"` // spool weight in grams, 0 when unknown
+	TempMin int    `json:"tempMin"` // nozzle temperature range in °C, 0 when unknown
+	TempMax int    `json:"tempMax"`
+	Bambu   bool   `json:"bambu"` // a Bambu Lab spool identified by its RFID tag
 }
 
 // HMS is a single Health Management System entry reported by the printer.
@@ -122,7 +135,13 @@ func statusFrom(state map[string]any) Status {
 			if !ok {
 				continue
 			}
-			unit := AMS{ID: int(num(u, "id")), Trays: []Tray{}}
+			unit := AMS{ID: int(num(u, "id")), Trays: []Tray{}, Humidity: -1, Temp: num(u, "temp"), DryMin: int(num(u, "dry_time"))}
+			if _, has := u["humidity_raw"]; has {
+				unit.Humidity = int(num(u, "humidity_raw"))
+			}
+			if t := int(num(obj(u, "dry_setting"), "dry_temperature")); t > 0 {
+				unit.DryTemp = t
+			}
 			if trays, ok := u["tray"].([]any); ok {
 				for _, t := range trays {
 					if t, ok := t.(map[string]any); ok {
@@ -136,6 +155,12 @@ func statusFrom(state map[string]any) Status {
 	if vt := obj(p, "vt_tray"); vt != nil {
 		t := trayFrom(vt)
 		s.External = &t
+	}
+	if list, ok := p["mapping"].([]any); ok {
+		s.AMSMapping = make([]int, len(list))
+		for i, v := range list {
+			s.AMSMapping[i] = mappingSlot(int(toNum(v)))
+		}
 	}
 
 	// The SD card holds the timelapses, so its size is reported with the camera.
@@ -160,14 +185,41 @@ func statusFrom(state map[string]any) Status {
 	return s
 }
 
+// mappingSlot converts an entry of print.mapping, ams_id<<8 | slot with
+// 0xFFFF for an unused filament, into the slot index used elsewhere,
+// ams_id*4 + slot (AMS HT units have ids from 128), or -1.
+func mappingSlot(v int) int {
+	ams, slot := v>>8, v&0xFF
+	if v < 0 || v == 0xFFFF || ams >= 254 || slot > 3 {
+		return -1
+	}
+	return ams*4 + slot
+}
+
 func trayFrom(t map[string]any) Tray {
-	tray := Tray{ID: int(num(t, "id")), Type: str(t, "tray_type"), Name: str(t, "tray_sub_brands"), Remain: -1}
+	tray := Tray{
+		ID: int(num(t, "id")), Type: str(t, "tray_type"), Name: str(t, "tray_sub_brands"),
+		Remain: -1, RemainG: -1, RemainM: -1, WeightG: int(num(t, "tray_weight")),
+		TempMin: int(num(t, "nozzle_temp_min")), TempMax: int(num(t, "nozzle_temp_max")),
+		Bambu: str(t, "tray_id_name") != "",
+	}
 	if c := str(t, "tray_color"); len(c) >= 6 {
 		tray.Color = "#" + c[:6]
 	}
 	// Only spools identified by RFID (tray_id_name set) report a meaningful remain.
-	if r, ok := t["remain"].(float64); ok && r >= 0 && str(t, "tray_id_name") != "" {
+	if r, ok := t["remain"].(float64); ok && r >= 0 && tray.Bambu {
 		tray.Remain = int(r)
+	}
+	// total_len is the spool's filament length in mm.
+	if length := num(t, "total_len"); tray.Remain >= 0 && length > 0 {
+		tray.RemainM = int(math.Round(length / 1000 * float64(tray.Remain) / 100))
+	}
+	// Spools without a tag report 0 g when the weight is unknown.
+	switch g, ok := t["remain_g"].(float64); {
+	case ok && g >= 0 && (tray.Bambu || g > 0):
+		tray.RemainG = int(g)
+	case tray.Remain >= 0 && tray.WeightG > 0:
+		tray.RemainG = tray.WeightG * tray.Remain / 100
 	}
 	return tray
 }
@@ -198,7 +250,11 @@ func str(m map[string]any, key string) string {
 
 // num reads a number that the printer may send either as a JSON number or as a string.
 func num(m map[string]any, key string) float64 {
-	switch v := m[key].(type) {
+	return toNum(m[key])
+}
+
+func toNum(v any) float64 {
+	switch v := v.(type) {
 	case float64:
 		return v
 	case string:

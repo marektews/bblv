@@ -68,6 +68,12 @@ const pl: Messages = {
     lanLiveView: 'Podgląd w LAN',
     liveViewOn: 'włączony',
     liveViewOff: 'wyłączony',
+    humidity: 'Wilgotność w AMS',
+    amsTemp: 'Temperatura w AMS',
+    drying: 'Suszenie, pozostało {time}',
+    dryingAt: 'Suszenie {temp}, pozostało {time}',
+    bambuSpool: 'Szpula Bambu Lab z tagiem RFID',
+    nozzleRange: 'Temperatura dyszy',
   },
   speed: {
     1: 'Cichy',

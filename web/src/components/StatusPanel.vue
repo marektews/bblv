@@ -2,13 +2,13 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { EXTERNAL_TRAY, type PrinterInfo, type Tray } from '../api'
-import { ACTIVE_STATES, slotLabel, useFormat } from '../format'
+import { ACTIVE_STATES, amsName, slotLabel, useFormat } from '../format'
 import { stageName } from '../locales/stages'
 import AlertList from './AlertList.vue'
 
 const props = defineProps<{ printer: PrinterInfo }>()
 const { t, te, locale } = useI18n()
-const { duration, finishAt, temp } = useFormat()
+const { duration, finishAt, temp, amount } = useFormat()
 
 const s = computed(() => props.printer.status)
 const active = computed(() => props.printer.online && ACTIVE_STATES.includes(s.value.state))
@@ -33,12 +33,48 @@ const sdCard = computed(() => {
   return free ? `${t('status.sdYes')}, ${free}` : t('status.sdYes')
 })
 
+interface AMSEnv {
+  key: string
+  label: string
+  humidity: number
+  temp: number
+  drying: string
+}
+
+// Conditions inside the AMS units that report them.
+const amsUnits = computed<AMSEnv[]>(() =>
+  s.value.ams
+    .filter((u) => u.humidity >= 0 || u.temp > 0 || u.dryMin > 0)
+    .map((u) => {
+      let drying = ''
+      if (u.dryMin > 0) {
+        drying = u.dryTemp > 0
+          ? t('status.dryingAt', { temp: `${u.dryTemp} °C`, time: duration(u.dryMin) })
+          : t('status.drying', { time: duration(u.dryMin) })
+      }
+      const label = s.value.ams.length > 1 || u.id >= 128 ? `AMS ${amsName(u.id)}` : 'AMS'
+      return { key: `env-${u.id}`, label, humidity: u.humidity, temp: u.temp, drying }
+    }),
+)
+
 interface Slot {
   key: string
   label: string
   tray: Tray
   active: boolean
   filaments: string // the print's filaments fed from this slot, e.g. "1, 3"
+  left: string[] // what is left on the spool, e.g. ["96%", "960 g", "317 m"]
+  temps: string // nozzle temperature range, e.g. "230–260 °C"
+}
+
+function spool(tray: Tray) {
+  const left = [
+    tray.remain >= 0 ? `${tray.remain}%` : '',
+    tray.remainG >= 0 ? amount(tray.remainG, 'g') : '',
+    tray.remainM >= 0 ? amount(tray.remainM, 'm') : '',
+  ].filter(Boolean)
+  const temps = tray.tempMin > 0 && tray.tempMax > 0 ? `${tray.tempMin}–${tray.tempMax} °C` : ''
+  return { left, temps }
 }
 
 const slots = computed<Slot[]>(() => {
@@ -51,7 +87,7 @@ const slots = computed<Slot[]>(() => {
     for (const tray of unit.trays) {
       const index = unit.id * 4 + tray.id
       const label = slotLabel(index, s.value.ams.length)
-      out.push({ key: `ams-${index}`, label, tray, active: s.value.activeTray === index, filaments: filaments(index) })
+      out.push({ key: `ams-${index}`, label, tray, active: s.value.activeTray === index, filaments: filaments(index), ...spool(tray) })
     }
   }
   const ext = s.value.external
@@ -62,6 +98,7 @@ const slots = computed<Slot[]>(() => {
       tray: ext,
       active: s.value.activeTray === EXTERNAL_TRAY,
       filaments: filaments(EXTERNAL_TRAY),
+      ...spool(ext),
     })
   }
   return out
@@ -151,14 +188,24 @@ const slots = computed<Slot[]>(() => {
 
     <section v-if="slots.length">
       <h4><fa-icon icon="palette" class="ic" />{{ t('status.filaments') }}</h4>
+      <div v-for="u in amsUnits" :key="u.key" class="ams-env">
+        <strong>{{ u.label }}</strong>
+        <span v-if="u.humidity >= 0" :title="t('status.humidity')"><fa-icon icon="droplet" class="ic" />{{ u.humidity }}%</span>
+        <span v-if="u.temp > 0" :title="t('status.amsTemp')"><fa-icon icon="temperature-half" class="ic" />{{ temp(u.temp, 0) }}</span>
+        <span v-if="u.drying" class="drying"><fa-icon icon="fire-flame-simple" class="ic" />{{ u.drying }}</span>
+      </div>
       <div class="slots">
         <div v-for="slot in slots" :key="slot.key" class="slot" :class="{ active: slot.active }" :title="slot.active ? t('status.active') : ''">
           <span class="swatch" :style="{ background: slot.tray.type ? slot.tray.color : 'transparent' }" />
           <div class="slot-text">
-            <div class="slot-label">{{ slot.label }}</div>
+            <div class="slot-label">
+              {{ slot.label }}
+              <el-tag v-if="slot.tray.bambu" size="small" type="success" class="bambu" :title="t('status.bambuSpool')">Bambu</el-tag>
+            </div>
             <div>{{ slot.tray.type || t('status.emptySlot') }}</div>
             <div v-if="slot.tray.name" class="muted">{{ slot.tray.name }}</div>
-            <div v-if="slot.tray.remain >= 0" class="muted">{{ slot.tray.remain }}%</div>
+            <div v-if="slot.left.length" class="muted amounts"><span v-for="a in slot.left" :key="a">{{ a }}</span></div>
+            <div v-if="slot.temps" class="muted" :title="t('status.nozzleRange')">{{ slot.temps }}</div>
           </div>
           <div v-if="slot.filaments" class="slot-use">
             <fa-icon icon="arrow-right" class="ic" />{{ t('viewer.filament') }} {{ slot.filaments }}
@@ -216,7 +263,7 @@ h4 {
 
 .slots {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
   gap: 8px;
 }
 
@@ -251,6 +298,29 @@ h4 {
 
 .slot-label {
   font-weight: 600;
+}
+
+.bambu {
+  margin-left: 4px;
+}
+
+.amounts {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 6px;
+}
+
+.ams-env {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.ams-env .drying {
+  color: var(--el-color-warning);
 }
 
 /* Own row across the tile: the text column next to the swatch is too narrow. */

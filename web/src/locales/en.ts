@@ -66,6 +66,12 @@ const en = {
     lanLiveView: 'LAN live view',
     liveViewOn: 'enabled',
     liveViewOff: 'disabled',
+    humidity: 'Humidity in the AMS',
+    amsTemp: 'Temperature in the AMS',
+    drying: 'Drying, {time} left',
+    dryingAt: 'Drying at {temp}, {time} left',
+    bambuSpool: 'Bambu Lab spool with an RFID tag',
+    nozzleRange: 'Nozzle temperature',
   },
   speed: {
     1: 'Silent',
