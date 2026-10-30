@@ -73,7 +73,7 @@ const slots = computed<Slot[]>(() => {
       </el-descriptions>
     </section>
 
-    <section>
+    <section v-if="printer.online">
       <h4><fa-icon icon="temperature-half" class="ic" />{{ t('status.temperatures') }}</h4>
       <el-descriptions :column="1" size="small" border>
         <el-descriptions-item>
@@ -109,7 +109,7 @@ const slots = computed<Slot[]>(() => {
       </el-descriptions>
     </section>
 
-    <section>
+    <section v-if="printer.online">
       <h4><fa-icon icon="fan" class="ic" />{{ t('status.fans') }}</h4>
       <el-descriptions :column="1" size="small" border>
         <el-descriptions-item>
