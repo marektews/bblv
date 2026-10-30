@@ -28,6 +28,34 @@ const natural = computed(() => new Intl.Collator(locale.value, { numeric: true, 
 const byName = (a: PrinterConfig, b: PrinterConfig) => natural.value.compare(a.name, b.name)
 const byHost = (a: PrinterConfig, b: PrinterConfig) => natural.value.compare(a.host, b.host)
 const bySerial = (a: PrinterConfig, b: PrinterConfig) => a.serial.localeCompare(b.serial)
+
+// The table's last sort order, remembered in the browser.
+type SortOrder = 'ascending' | 'descending'
+const SORT_KEY = 'printerSort'
+function savedSort(): { prop: string; order: SortOrder } | undefined {
+  try {
+    const s = JSON.parse(localStorage.getItem(SORT_KEY) ?? 'null')
+    if (['name', 'host', 'serial'].includes(s?.prop) && ['ascending', 'descending'].includes(s?.order)) {
+      return { prop: s.prop, order: s.order }
+    }
+  } catch {
+    // Unavailable storage or a damaged entry; the table starts unsorted.
+  }
+  return undefined
+}
+const printerSort = savedSort()
+
+function onSortChange({ prop, order }: { prop: string | null; order: SortOrder | null }) {
+  try {
+    if (prop && order) {
+      localStorage.setItem(SORT_KEY, JSON.stringify({ prop, order }))
+    } else {
+      localStorage.removeItem(SORT_KEY)
+    }
+  } catch {
+    // Not remembered; the table starts unsorted next time.
+  }
+}
 const config = ref<AppConfig | null>(null)
 const discovered = ref<DiscoveredPrinter[]>([])
 const discoveryError = ref('')
@@ -161,7 +189,13 @@ async function changePassword(remove = false) {
         <h3><fa-icon icon="print" class="ic" />{{ t('settings.printers') }}</h3>
         <el-button size="small" @click="openNew()"><fa-icon icon="plus" class="ic" />{{ t('settings.addManually') }}</el-button>
       </div>
-      <el-table :data="config?.printers ?? []" :empty-text="t('settings.noPrinters')" size="small">
+      <el-table
+        :data="config?.printers ?? []"
+        :empty-text="t('settings.noPrinters')"
+        :default-sort="printerSort"
+        size="small"
+        @sort-change="onSortChange"
+      >
         <el-table-column prop="name" :label="t('settings.name')" min-width="140" sortable :sort-method="byName" />
         <el-table-column prop="model" :label="t('settings.model')" width="100" />
         <el-table-column prop="host" :label="t('settings.host')" width="140" sortable :sort-method="byHost" />
