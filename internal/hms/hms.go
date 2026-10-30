@@ -45,9 +45,10 @@ func load(lang string) *file {
 	var f *file
 	if r, err := data.Open("data/hms_" + lang + ".json.gz"); err == nil {
 		defer r.Close()
-		if gz, err := gzip.NewReader(r); err == nil {
+		var gz *gzip.Reader
+		if gz, err = gzip.NewReader(r); err == nil {
 			f = &file{}
-			if err := json.NewDecoder(gz).Decode(f); err != nil {
+			if err = json.NewDecoder(gz).Decode(f); err != nil {
 				slog.Error("invalid HMS table", "lang", lang, "err", err)
 				f = nil
 			}
@@ -71,7 +72,7 @@ func Text(lang, serial, kind, code string) string {
 			t = f.Errors
 		}
 		if m, ok := t[key]; ok {
-			if s, ok := m[prefix(serial)]; ok {
+			if s, found := m[prefix(serial)]; found {
 				return s
 			}
 			return m[""]

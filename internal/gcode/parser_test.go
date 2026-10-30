@@ -132,7 +132,7 @@ func TestEncode(t *testing.T) {
 		t.Fatal(err)
 	}
 	var buf bytes.Buffer
-	if err := m.Encode(&buf); err != nil {
+	if err = m.Encode(&buf); err != nil {
 		t.Fatal(err)
 	}
 	b := buf.Bytes()
@@ -144,7 +144,7 @@ func TestEncode(t *testing.T) {
 		t.Fatalf("metadata length %d not aligned", n)
 	}
 	var md meta
-	if err := json.Unmarshal(b[12:12+n], &md); err != nil {
+	if err = json.Unmarshal(b[12:12+n], &md); err != nil {
 		t.Fatal(err)
 	}
 	if md.Points != len(m.Points) || len(md.Layers) != 2 {

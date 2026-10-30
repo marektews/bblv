@@ -44,7 +44,7 @@ func setupWithConfig(t *testing.T) (*httptest.Server, *config.Store) {
 		t.Fatal(err)
 	}
 	mon := monitor.New(store, "")
-	if err := mon.AddReplay(rec, 0); err != nil {
+	if err = mon.AddReplay(rec, 0); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())

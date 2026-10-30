@@ -62,8 +62,8 @@ func TestStream6000(t *testing.T) {
 	defer ln.Close()
 	login := make(chan []byte, 1)
 	go func() {
-		conn, err := ln.Accept()
-		if err != nil {
+		conn, acceptErr := ln.Accept()
+		if acceptErr != nil {
 			return
 		}
 		defer conn.Close()
@@ -101,8 +101,8 @@ func TestStream6000Refused(t *testing.T) {
 	}
 	defer ln.Close()
 	go func() {
-		conn, err := ln.Accept()
-		if err != nil {
+		conn, acceptErr := ln.Accept()
+		if acceptErr != nil {
 			return
 		}
 		defer conn.Close()

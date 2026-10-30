@@ -21,11 +21,11 @@ func Replay(ctx context.Context, path string, speed float64, fn func(Entry)) err
 	dec := json.NewDecoder(bufio.NewReader(f))
 	var prev time.Time
 	for {
-		if err := ctx.Err(); err != nil {
+		if err = ctx.Err(); err != nil {
 			return err
 		}
 		var e Entry
-		if err := dec.Decode(&e); err == io.EOF {
+		if err = dec.Decode(&e); err == io.EOF {
 			return nil
 		} else if err != nil {
 			return err

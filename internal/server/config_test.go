@@ -40,8 +40,8 @@ func TestPrinterConfigLifecycle(t *testing.T) {
 	if resp.StatusCode != 200 || created.ID != "bambus-a1" || created.Serial != "03919D000000000" || created.HasAccessCode {
 		t.Fatalf("create: %d %+v", resp.StatusCode, created)
 	}
-	if resp := send(t, c, "POST", ts.URL+"/api/config/printers", map[string]string{"host": "127.0.0.2", "serial": "03919D000000000"}); resp.StatusCode != http.StatusConflict {
-		t.Fatalf("duplicate serial: %d", resp.StatusCode)
+	if dup := send(t, c, "POST", ts.URL+"/api/config/printers", map[string]string{"host": "127.0.0.2", "serial": "03919D000000000"}); dup.StatusCode != http.StatusConflict {
+		t.Fatalf("duplicate serial: %d", dup.StatusCode)
 	}
 	var info []struct{ ID string }
 	getJSON(t, ts.URL+"/api/printers", &info)
@@ -81,8 +81,8 @@ func TestPrinterConfigLifecycle(t *testing.T) {
 		t.Fatalf("config leaks the code or lacks the update: %s", raw)
 	}
 
-	if resp := send(t, c, "DELETE", ts.URL+"/api/config/printers/bambus-a1", nil); resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("delete: %d", resp.StatusCode)
+	if del := send(t, c, "DELETE", ts.URL+"/api/config/printers/bambus-a1", nil); del.StatusCode != http.StatusNoContent {
+		t.Fatalf("delete: %d", del.StatusCode)
 	}
 	if len(cfg.Get().Printers) != 0 {
 		t.Fatal("printer still configured")

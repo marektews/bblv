@@ -164,13 +164,13 @@ function onConfFile(e: Event) {
 
 const pwMismatch = computed(() => pw.password !== pw.repeat)
 
-async function changePassword(remove = false) {
+async function changePassword(unset = false) {
   pw.busy = true
   try {
-    await setPassword(pw.current, remove ? '' : pw.password)
+    await setPassword(pw.current, unset ? '' : pw.password)
     Object.assign(pw, { current: '', password: '', repeat: '' })
-    auth.required = !remove
-    ElMessage.success(remove ? t('settings.passwordRemoved') : t('settings.passwordSaved'))
+    auth.required = !unset
+    ElMessage.success(unset ? t('settings.passwordRemoved') : t('settings.passwordSaved'))
     await load()
   } catch (err) {
     ElMessage.error(message(err))

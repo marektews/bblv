@@ -13,7 +13,7 @@ func TestStoreUpdateSavesAndKeepsStateOnError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Update(func(c *Config) error {
+	if err = s.Update(func(c *Config) error {
 		c.Printers = append(c.Printers, Printer{ID: "a1", Host: "10.0.0.2"})
 		return nil
 	}); err != nil {

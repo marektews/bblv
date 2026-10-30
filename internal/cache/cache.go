@@ -63,15 +63,15 @@ func (c *Cache) Put(key, ext string, write func(io.Writer) error) (string, error
 		return "", err
 	}
 	defer os.Remove(tmp.Name())
-	if err := write(tmp); err != nil {
+	if err = write(tmp); err != nil {
 		tmp.Close()
 		return "", err
 	}
-	if err := tmp.Close(); err != nil {
+	if err = tmp.Close(); err != nil {
 		return "", err
 	}
 	p := filepath.Join(c.dir, key+ext)
-	if err := os.Rename(tmp.Name(), p); err != nil {
+	if err = os.Rename(tmp.Name(), p); err != nil {
 		return "", err
 	}
 	c.evict(p)
@@ -96,8 +96,8 @@ func (c *Cache) evict(keep string) {
 		if e.IsDir() || strings.HasSuffix(e.Name(), ".tmp") {
 			continue
 		}
-		info, err := e.Info()
-		if err != nil {
+		info, infoErr := e.Info()
+		if infoErr != nil {
 			continue
 		}
 		files = append(files, file{filepath.Join(c.dir, e.Name()), info.Size(), info.ModTime()})

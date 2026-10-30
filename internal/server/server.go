@@ -243,7 +243,7 @@ func (s *server) upload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	if err := s.mon.Upload(id, res); err != nil {
+	if err = s.mon.Upload(id, res); err != nil {
 		writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
@@ -267,7 +267,7 @@ func (s *server) events(w http.ResponseWriter, r *http.Request) {
 
 	updates, cancel := s.mon.Subscribe()
 	defer cancel()
-	send := func(e monitor.Event) error {
+	emit := func(e monitor.Event) error {
 		var data any = e.Info
 		if e.Type == "removed" {
 			data = map[string]string{"id": e.Info.ID}
@@ -280,7 +280,7 @@ func (s *server) events(w http.ResponseWriter, r *http.Request) {
 		return err
 	}
 	for _, info := range s.mon.Printers() {
-		if send(monitor.Event{Type: "printer", Info: info}) != nil {
+		if emit(monitor.Event{Type: "printer", Info: info}) != nil {
 			return
 		}
 	}
@@ -293,7 +293,7 @@ func (s *server) events(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case e := <-updates:
-			if send(e) != nil {
+			if emit(e) != nil {
 				return
 			}
 		case <-ping.C:
@@ -335,10 +335,10 @@ func serveFile(w http.ResponseWriter, r *http.Request, path, etag, contentType s
 		gz, _ := gzip.NewWriterLevel(w, gzip.BestSpeed)
 		defer gz.Close()
 		out = gz
-	} else if info, err := f.Stat(); err == nil {
+	} else if info, statErr := f.Stat(); statErr == nil {
 		h.Set("Content-Length", strconv.FormatInt(info.Size(), 10))
 	}
-	if _, err := io.Copy(out, f); err != nil {
+	if _, err = io.Copy(out, f); err != nil {
 		slog.Debug("send file", "path", path, "err", err)
 	}
 }

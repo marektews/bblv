@@ -71,16 +71,16 @@ func main() {
 				log.Fatalf("%s/%s: %v", lang, prefix, err)
 			}
 			for kind, raw := range map[string]map[string]json.RawMessage{"hms": r.Data.DeviceHMS, "errors": r.Data.DeviceError} {
-				entries, ver, err := entries(raw, lang)
-				if err != nil {
-					log.Fatalf("%s/%s %s: %v", lang, prefix, kind, err)
+				list, ver, listErr := entries(raw, lang)
+				if listErr != nil {
+					log.Fatalf("%s/%s %s: %v", lang, prefix, kind, listErr)
 				}
 				version = max(version, ver)
 				target := hms
 				if kind == "errors" {
 					target = errs
 				}
-				for _, e := range entries {
+				for _, e := range list {
 					text := strings.TrimSpace(e.Intro)
 					if text == "" {
 						continue
@@ -119,7 +119,7 @@ func fetch(client *http.Client, lang, prefix string) (*response, error) {
 		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 	var r response
-	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
+	if err = json.NewDecoder(resp.Body).Decode(&r); err != nil {
 		return nil, err
 	}
 	if r.Result != 0 {
@@ -183,11 +183,11 @@ func write(path string, f file) error {
 		return err
 	}
 	gz, _ := gzip.NewWriterLevel(out, gzip.BestCompression)
-	if _, err := gz.Write(b); err != nil {
+	if _, err = gz.Write(b); err != nil {
 		out.Close()
 		return err
 	}
-	if err := gz.Close(); err != nil {
+	if err = gz.Close(); err != nil {
 		out.Close()
 		return err
 	}

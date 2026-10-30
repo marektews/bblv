@@ -340,7 +340,7 @@ func recordedModel(path string) (string, error) {
 	}
 	defer f.Close()
 	var e recording.Entry
-	if err := json.NewDecoder(bufio.NewReader(f)).Decode(&e); err != nil {
+	if err = json.NewDecoder(bufio.NewReader(f)).Decode(&e); err != nil {
 		return "", err
 	}
 	return e.Model, nil

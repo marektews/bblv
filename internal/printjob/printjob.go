@@ -62,7 +62,7 @@ type bbl struct {
 // sdCard is the part of ftps.Conn that Find needs.
 type sdCard interface {
 	List(dir string) ([]*ftp.Entry, error)
-	Open(path string) (io.ReadCloser, error)
+	Open(name string) (io.ReadCloser, error)
 }
 
 // Find locates the files of the print named subtask (subtask_name in the
@@ -293,8 +293,8 @@ func save(store *cache.Cache, key string, model *gcode.Model, png []byte) (*Resu
 	}
 	if png != nil {
 		r.Thumbnail, err = store.Put(key, ".png", func(w io.Writer) error {
-			_, err := w.Write(png)
-			return err
+			_, werr := w.Write(png)
+			return werr
 		})
 		if err != nil {
 			return nil, err

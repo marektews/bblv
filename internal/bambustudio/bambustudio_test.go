@@ -16,7 +16,7 @@ func TestAccessCodes(t *testing.T) {
 	if len(codes) != 1 || codes["03919D000000000"] != "12345678" {
 		t.Fatalf("codes = %v", codes)
 	}
-	if _, err := AccessCodes([]byte("not json")); err == nil {
+	if _, err = AccessCodes([]byte("not json")); err == nil {
 		t.Fatal("expected an error")
 	}
 }

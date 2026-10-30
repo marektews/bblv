@@ -58,7 +58,8 @@ func runServiceCommand(args []string) error {
 	}
 	switch action {
 	case "status":
-		st, err := s.Status()
+		var st service.Status
+		st, err = s.Status()
 		if errors.Is(err, service.ErrNotInstalled) {
 			fmt.Println("not installed")
 			return nil
@@ -69,7 +70,7 @@ func runServiceCommand(args []string) error {
 		fmt.Println(map[service.Status]string{service.StatusRunning: "running", service.StatusStopped: "stopped"}[st])
 		return nil
 	case "install", "uninstall", "start", "stop", "restart":
-		if err := service.Control(s, action); err != nil {
+		if err = service.Control(s, action); err != nil {
 			return fmt.Errorf("%w (administrator or root rights are needed)", err)
 		}
 		if action == "install" {

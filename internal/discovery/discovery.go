@@ -71,8 +71,8 @@ func Listen(ctx context.Context) *Listener {
 	go func() {
 		buf := make([]byte, 4096)
 		for {
-			n, _, err := pc.ReadFrom(buf)
-			if err != nil {
+			n, _, readErr := pc.ReadFrom(buf)
+			if readErr != nil {
 				return
 			}
 			if d, ok := Parse(buf[:n]); ok {

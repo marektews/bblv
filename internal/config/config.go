@@ -55,10 +55,10 @@ func Load(dataDir string) (*Config, error) {
 		return nil, err
 	}
 	var c Config
-	if err := json.Unmarshal(b, &c); err != nil {
+	if err = json.Unmarshal(b, &c); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", FileName, err)
 	}
-	if err := c.validate(); err != nil {
+	if err = c.validate(); err != nil {
 		return nil, fmt.Errorf("%s: %w", FileName, err)
 	}
 	return &c, nil
@@ -94,14 +94,14 @@ func Save(dataDir string, c *Config) error {
 		return err
 	}
 	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(b); err != nil {
+	if _, err = tmp.Write(b); err != nil {
 		tmp.Close()
 		return err
 	}
-	if err := tmp.Close(); err != nil {
+	if err = tmp.Close(); err != nil {
 		return err
 	}
-	if err := os.Chmod(tmp.Name(), 0o600); err != nil {
+	if err = os.Chmod(tmp.Name(), 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp.Name(), filepath.Join(dataDir, FileName))

@@ -16,11 +16,11 @@ func TestEvictsLeastRecentlyUsed(t *testing.T) {
 		t.Fatal(err)
 	}
 	put := func(key string) {
-		if _, err := c.Put(key, ".bin", func(w io.Writer) error {
-			_, err := io.WriteString(w, strings.Repeat("x", 10))
-			return err
-		}); err != nil {
-			t.Fatal(err)
+		if _, putErr := c.Put(key, ".bin", func(w io.Writer) error {
+			_, werr := io.WriteString(w, strings.Repeat("x", 10))
+			return werr
+		}); putErr != nil {
+			t.Fatal(putErr)
 		}
 	}
 	put("a")

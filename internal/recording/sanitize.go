@@ -46,8 +46,8 @@ func (s *Sanitizer) Report(payload []byte) []byte {
 	return bytes.TrimSpace(buf.Bytes())
 }
 
-func (s *Sanitizer) scrub(v any) any {
-	switch v := v.(type) {
+func (s *Sanitizer) scrub(in any) any {
+	switch v := in.(type) {
 	case map[string]any:
 		for k, x := range v {
 			if !sensitive[k] {
@@ -72,7 +72,7 @@ func (s *Sanitizer) scrub(v any) any {
 	case string:
 		return s.text(v)
 	}
-	return v
+	return in
 }
 
 func (s *Sanitizer) text(t string) string {
@@ -84,14 +84,14 @@ func (s *Sanitizer) text(t string) string {
 
 // Serials returns the serial numbers ("sn" values) found in a report.
 func Serials(payload []byte) []string {
-	var v any
-	if json.Unmarshal(payload, &v) != nil {
+	var doc any
+	if json.Unmarshal(payload, &doc) != nil {
 		return nil
 	}
 	var out []string
 	var walk func(any)
-	walk = func(v any) {
-		switch v := v.(type) {
+	walk = func(node any) {
+		switch v := node.(type) {
 		case map[string]any:
 			for k, x := range v {
 				if s, ok := x.(string); ok && k == "sn" && s != "" {
@@ -105,6 +105,6 @@ func Serials(payload []byte) []string {
 			}
 		}
 	}
-	walk(v)
+	walk(doc)
 	return out
 }

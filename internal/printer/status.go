@@ -118,7 +118,7 @@ func statusFrom(state map[string]any) Status {
 	}
 	if list, ok := p["hms"].([]any); ok {
 		for _, it := range list {
-			if h, ok := it.(map[string]any); ok {
+			if h, isEntry := it.(map[string]any); isEntry {
 				s.HMS = append(s.HMS, HMS{Attr: uint32(num(h, "attr")), Code: uint32(num(h, "code"))})
 			}
 		}
@@ -135,8 +135,8 @@ func statusFrom(state map[string]any) Status {
 	s.AMS = []AMS{}
 	if units, ok := ams["ams"].([]any); ok {
 		for _, it := range units {
-			u, ok := it.(map[string]any)
-			if !ok {
+			u, isUnit := it.(map[string]any)
+			if !isUnit {
 				continue
 			}
 			unit := AMS{ID: int(num(u, "id")), Trays: []Tray{}, Humidity: -1, Temp: num(u, "temp"), DryMin: int(num(u, "dry_time"))}
@@ -146,9 +146,9 @@ func statusFrom(state map[string]any) Status {
 			if t := int(num(obj(u, "dry_setting"), "dry_temperature")); t > 0 {
 				unit.DryTemp = t
 			}
-			if trays, ok := u["tray"].([]any); ok {
-				for _, t := range trays {
-					if t, ok := t.(map[string]any); ok {
+			if trays, hasTrays := u["tray"].([]any); hasTrays {
+				for _, raw := range trays {
+					if t, isTray := raw.(map[string]any); isTray {
 						unit.Trays = append(unit.Trays, trayFrom(t))
 					}
 				}
@@ -181,7 +181,7 @@ func statusFrom(state map[string]any) Status {
 
 	if mods, ok := obj(state, "info")["module"].([]any); ok {
 		for _, it := range mods {
-			if m, ok := it.(map[string]any); ok && str(m, "name") == "ota" {
+			if m, isModule := it.(map[string]any); isModule && str(m, "name") == "ota" {
 				s.Firmware = str(m, "sw_ver")
 			}
 		}
@@ -233,7 +233,7 @@ func trayFrom(t map[string]any) Tray {
 func merge(dst, src map[string]any) {
 	for k, v := range src {
 		if sm, ok := v.(map[string]any); ok {
-			if dm, ok := dst[k].(map[string]any); ok {
+			if dm, isMap := dst[k].(map[string]any); isMap {
 				merge(dm, sm)
 				continue
 			}
@@ -258,11 +258,11 @@ func num(m map[string]any, key string) float64 {
 }
 
 func toNum(v any) float64 {
-	switch v := v.(type) {
+	switch n := v.(type) {
 	case float64:
-		return v
+		return n
 	case string:
-		f, _ := strconv.ParseFloat(v, 64)
+		f, _ := strconv.ParseFloat(n, 64)
 		return f
 	}
 	return 0

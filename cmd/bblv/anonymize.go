@@ -53,12 +53,12 @@ func runAnonymize(args []string) error {
 		} else if e.Payload != nil {
 			e.Payload = san.Report(e.Payload)
 		}
-		if err := enc.Encode(e); err != nil {
+		if err = enc.Encode(e); err != nil {
 			f.Close()
 			return err
 		}
 	}
-	if err := f.Close(); err != nil {
+	if err = f.Close(); err != nil {
 		return err
 	}
 	fmt.Println("wrote", out)
@@ -75,7 +75,7 @@ func readEntries(path string) ([]recording.Entry, error) {
 	var out []recording.Entry
 	for {
 		var e recording.Entry
-		if err := dec.Decode(&e); errors.Is(err, io.EOF) {
+		if err = dec.Decode(&e); errors.Is(err, io.EOF) {
 			return out, nil
 		} else if err != nil {
 			return nil, fmt.Errorf("%s: %w", path, err)

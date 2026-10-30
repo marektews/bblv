@@ -52,15 +52,15 @@ func runRecord(args []string) error {
 	var client *printer.Client
 	var status statusLogger
 	client = printer.New(*p, func(r printer.Report) {
-		if err := rec.Write(r.Time, r.Payload); err != nil {
-			slog.Error("write recording", "err", err)
+		if werr := rec.Write(r.Time, r.Payload); werr != nil {
+			slog.Error("write recording", "err", werr)
 		}
 		status.log(client.Status())
 	})
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := client.Connect(ctx); err != nil {
+	if err = client.Connect(ctx); err != nil {
 		return err
 	}
 	defer client.Close()

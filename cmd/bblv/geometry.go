@@ -44,7 +44,7 @@ func runGeometry(args []string) error {
 		if err != nil {
 			return err
 		}
-		if err := m.Encode(f); err != nil {
+		if err = m.Encode(f); err != nil {
 			f.Close()
 			return err
 		}
@@ -64,7 +64,8 @@ func runGeometry(args []string) error {
 
 	name, gcodeFile := *subtask, ""
 	if name == "" {
-		s, err := currentPrint(ctx, *p)
+		var s printer.Status
+		s, err = currentPrint(ctx, *p)
 		if err != nil {
 			return err
 		}
@@ -95,7 +96,7 @@ func runGeometry(args []string) error {
 	} else {
 		slog.Info("geometry served from cache")
 	}
-	if info, err := os.Stat(res.Geometry); err == nil {
+	if info, statErr := os.Stat(res.Geometry); statErr == nil {
 		slog.Info("cached", "geometry", res.Geometry, "bytes", info.Size(), "thumbnail", res.Thumbnail)
 	}
 	return nil

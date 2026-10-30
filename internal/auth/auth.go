@@ -65,8 +65,8 @@ func (a *Auth) Login(w http.ResponseWriter, r *http.Request, password string) (b
 	if secret == "" {
 		// The password was set by editing config.json.
 		secret = newSecret()
-		if err := a.store.Update(func(c *config.Config) error {
-			c.SessionSecret = secret
+		if err := a.store.Update(func(cfg *config.Config) error {
+			cfg.SessionSecret = secret
 			return nil
 		}); err != nil {
 			return false, err

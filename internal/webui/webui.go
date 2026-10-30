@@ -85,7 +85,7 @@ func compress(files fs.FS, name string) ([]byte, error) {
 	var buf bytes.Buffer
 	gz, _ := gzip.NewWriterLevel(&buf, gzip.BestCompression)
 	gz.Write(data)
-	if err := gz.Close(); err != nil {
+	if err = gz.Close(); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil

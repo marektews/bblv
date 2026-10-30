@@ -41,7 +41,7 @@ func Create(path, model string, san *Sanitizer) (*Recorder, error) {
 	enc := json.NewEncoder(f)
 	enc.SetEscapeHTML(false)
 	r := &Recorder{f: f, enc: enc, san: san}
-	if err := enc.Encode(Entry{Time: time.Now(), Kind: "meta", Model: model, Anonymized: san != nil}); err != nil {
+	if err = enc.Encode(Entry{Time: time.Now(), Kind: "meta", Model: model, Anonymized: san != nil}); err != nil {
 		f.Close()
 		return nil, err
 	}

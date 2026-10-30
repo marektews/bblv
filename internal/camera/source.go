@@ -75,13 +75,13 @@ func stream6000(ctx context.Context, addr, accessCode string, frame func([]byte)
 	binary.LittleEndian.PutUint32(login[4:], 0x3000)
 	copy(login[16:48], "bblp")
 	copy(login[48:80], accessCode)
-	if _, err := conn.Write(login); err != nil {
+	if _, err = conn.Write(login); err != nil {
 		return err
 	}
 	head := make([]byte, 16)
 	for {
 		conn.SetReadDeadline(time.Now().Add(15 * time.Second))
-		if _, err := io.ReadFull(conn, head); err != nil {
+		if _, err = io.ReadFull(conn, head); err != nil {
 			return err
 		}
 		size := binary.LittleEndian.Uint32(head)
@@ -89,7 +89,7 @@ func stream6000(ctx context.Context, addr, accessCode string, frame func([]byte)
 			return fmt.Errorf("invalid frame size %d", size)
 		}
 		img := make([]byte, size)
-		if _, err := io.ReadFull(conn, img); err != nil {
+		if _, err = io.ReadFull(conn, img); err != nil {
 			return err
 		}
 		if !bytes.HasPrefix(img, soi) {
@@ -163,7 +163,7 @@ func streamRTSP(ctx context.Context, ffmpeg string, u *url.URL, frame func([]byt
 	}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
-	if err := cmd.Start(); err != nil {
+	if err = cmd.Start(); err != nil {
 		return err
 	}
 	err = splitJPEG(out, frame)

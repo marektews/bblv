@@ -32,7 +32,7 @@ func Dial(ctx context.Context, host, accessCode string) (*Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := c.Login("bblp", accessCode); err != nil {
+	if err = c.Login("bblp", accessCode); err != nil {
 		c.Quit()
 		return nil, err
 	}
