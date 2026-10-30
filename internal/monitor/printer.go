@@ -181,6 +181,12 @@ func (p *Printer) nextJob(s printer.Status) *job {
 			return nil
 		}
 	}
+	// Without an SD card the printer keeps the files where FTPS cannot reach
+	// them; they are fetched once a card is inserted.
+	if s.NoSDCard {
+		p.geom = Geometry{State: GeometryMissing, Subtask: s.Subtask}
+		return nil
+	}
 	p.fetching = true
 	p.attempts++
 	p.lastAttempt = time.Now()

@@ -31,6 +31,7 @@ type Status struct {
 	ActiveTray   int     `json:"activeTray"` // unit*4+slot, 254 = external spool, -1 = none
 	External     *Tray   `json:"external"`
 	SDCard       bool    `json:"sdCard"`
+	NoSDCard     bool    `json:"-"`         // the printer reports that it has no SD card
 	SDTotalKB    int     `json:"sdTotalKb"` // 0 when not reported
 	SDFreeKB     int     `json:"sdFreeKb"`
 	// LANLiveView is "enabled" or "disabled" for printers with an RTSP
@@ -168,7 +169,8 @@ func statusFrom(state map[string]any) Status {
 	}
 
 	// The SD card holds the timelapses, so its size is reported with the camera.
-	s.SDCard, _ = p["sdcard"].(bool)
+	sd, reported := p["sdcard"].(bool)
+	s.SDCard, s.NoSDCard = sd, reported && !sd
 	ipcam := obj(p, "ipcam")
 	s.SDTotalKB, s.SDFreeKB = int(num(ipcam, "tl_external_total_kb")), int(num(ipcam, "tl_external_free_kb"))
 	switch s.RTSPURL = str(ipcam, "rtsp_url"); s.RTSPURL {

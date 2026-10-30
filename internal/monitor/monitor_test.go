@@ -71,6 +71,29 @@ func TestFetchOnNewPrintAndRetry(t *testing.T) {
 	eventually(t, func() bool { return p.info().Geometry.Key == "k2" })
 }
 
+func TestNoFetchWithoutSDCard(t *testing.T) {
+	m := New(nil, "")
+	calls := make(chan job, 10)
+	p := newPrinter(m, "p", "", "H2D", nil)
+	p.fetcher = func(j job) Geometry {
+		calls <- j
+		return Geometry{State: GeometryReady}
+	}
+	p.onStatus(printer.Status{State: "RUNNING", Subtask: "a", NoSDCard: true})
+	select {
+	case j := <-calls:
+		t.Fatalf("fetched %+v without an SD card", j)
+	case <-time.After(20 * time.Millisecond):
+	}
+	if g := p.info().Geometry; g.State != GeometryMissing || g.Subtask != "a" {
+		t.Fatalf("geometry = %+v", g)
+	}
+	// A card is inserted.
+	p.onStatus(printer.Status{State: "RUNNING", Subtask: "a", SDCard: true})
+	<-calls
+	eventually(t, func() bool { return p.info().Geometry.State == GeometryReady })
+}
+
 func TestFinishedPrintIsNotRetried(t *testing.T) {
 	m := New(nil, "")
 	calls := make(chan job, 10)

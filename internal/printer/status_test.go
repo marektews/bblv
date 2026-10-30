@@ -127,6 +127,14 @@ func TestStatusAMSEnvironmentSpoolsAndMapping(t *testing.T) {
 	if tr[2].RemainG != 420 { // as reported, not from a weight
 		t.Errorf("remain_g = %d", tr[2].RemainG)
 	}
+	var noCard map[string]any
+	json.Unmarshal([]byte(`{"print":{"sdcard":false}}`), &noCard)
+	if st := statusFrom(noCard); st.SDCard || !st.NoSDCard {
+		t.Errorf("sdcard false: SDCard %v, NoSDCard %v", st.SDCard, st.NoSDCard)
+	}
+	if st := statusFrom(map[string]any{}); st.NoSDCard {
+		t.Error("NoSDCard set without the printer reporting it")
+	}
 	var noSensor map[string]any
 	json.Unmarshal([]byte(`{"print":{"ams":{"ams":[{"id":"0","tray":[]}]}}}`), &noSensor)
 	if h := statusFrom(noSensor).AMS[0].Humidity; h != -1 {
