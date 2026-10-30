@@ -71,6 +71,7 @@ const pl: Messages = {
     usage: 'Zużycie filamentu',
     humidity: 'Wilgotność w AMS',
     amsTemp: 'Temperatura w AMS',
+    amsLiteHint: 'AMS lite jest otwarty i nie ma czujnika wilgotności, więc te wartości mogą być przybliżone lub zastępcze.',
     drying: 'Suszenie, pozostało {time}',
     dryingAt: 'Suszenie {temp}, pozostało {time}',
     bambuSpool: 'Szpula Bambu Lab z tagiem RFID',

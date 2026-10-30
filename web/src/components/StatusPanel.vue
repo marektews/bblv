@@ -12,8 +12,9 @@ const { duration, finishAt, temp, amount } = useFormat()
 
 const s = computed(() => props.printer.status)
 const active = computed(() => props.printer.online && ACTIVE_STATES.includes(s.value.state))
-// The A1 series has only the part cooling and hotend fans.
-const hasChamberFans = computed(() => !props.printer.model.toUpperCase().startsWith('A1'))
+// The A1 series has only the part cooling and hotend fans, and works with the AMS lite.
+const a1Series = computed(() => props.printer.model.toUpperCase().startsWith('A1'))
+const hasChamberFans = computed(() => !a1Series.value)
 const speed = computed(() => (te(`speed.${s.value.speedLevel}`) ? t(`speed.${s.value.speedLevel}`) : '—'))
 const stage = computed(() => stageName(s.value.stage, locale.value))
 
@@ -45,6 +46,7 @@ interface AMSEnv {
   humidity: number
   temp: number
   drying: string
+  lite: boolean // the open AMS lite, whose readings may not be measured
 }
 
 // Conditions inside the AMS units that report them.
@@ -58,8 +60,10 @@ const amsUnits = computed<AMSEnv[]>(() =>
           ? t('status.dryingAt', { temp: `${u.dryTemp} °C`, time: duration(u.dryMin) })
           : t('status.drying', { time: duration(u.dryMin) })
       }
-      const label = s.value.ams.length > 1 || u.id >= 128 ? `AMS ${amsName(u.id)}` : 'AMS'
-      return { key: `env-${u.id}`, label, humidity: u.humidity, temp: u.temp, drying }
+      const lite = a1Series.value
+      const name = lite ? 'AMS lite' : 'AMS'
+      const label = s.value.ams.length > 1 || u.id >= 128 ? `${name} ${amsName(u.id)}` : name
+      return { key: `env-${u.id}`, label, humidity: u.humidity, temp: u.temp, drying, lite }
     }),
 )
 
@@ -202,6 +206,9 @@ const slots = computed<Slot[]>(() => {
         <strong>{{ u.label }}</strong>
         <span v-if="u.humidity >= 0" :title="t('status.humidity')"><fa-icon icon="droplet" class="ic" />{{ u.humidity }}%</span>
         <span v-if="u.temp > 0" :title="t('status.amsTemp')"><fa-icon icon="temperature-half" class="ic" />{{ temp(u.temp, 0) }}</span>
+        <el-tooltip v-if="u.lite && (u.humidity >= 0 || u.temp > 0)" :content="t('status.amsLiteHint')">
+          <span class="lite-warn"><fa-icon icon="triangle-exclamation" /></span>
+        </el-tooltip>
         <span v-if="u.drying" class="drying"><fa-icon icon="fire-flame-simple" class="ic" />{{ u.drying }}</span>
       </div>
       <div class="slots">
@@ -329,7 +336,8 @@ h4 {
   font-size: 12px;
 }
 
-.ams-env .drying {
+.ams-env .drying,
+.ams-env .lite-warn {
   color: var(--el-color-warning);
 }
 

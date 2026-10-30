@@ -69,6 +69,7 @@ const en = {
     usage: 'Filament use',
     humidity: 'Humidity in the AMS',
     amsTemp: 'Temperature in the AMS',
+    amsLiteHint: 'The AMS lite is open and has no humidity sensor, so these values may be estimates or placeholders.',
     drying: 'Drying, {time} left',
     dryingAt: 'Drying at {temp}, {time} left',
     bambuSpool: 'Bambu Lab spool with an RFID tag',
