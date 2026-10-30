@@ -1,5 +1,6 @@
+import type { IconName } from '@fortawesome/fontawesome-svg-core'
 import { useI18n } from 'vue-i18n'
-import { EXTERNAL_TRAY, type Status, type Tray } from './api'
+import { EXTERNAL_TRAY, type PrinterInfo, type Status, type Tray } from './api'
 
 export function useFormat() {
   const { t, locale } = useI18n()
@@ -46,3 +47,37 @@ export function trayAt(s: Status, index: number): Tray | undefined {
 }
 
 export const ACTIVE_STATES = ['PREPARE', 'RUNNING', 'PAUSE']
+
+export type StateTagType = 'primary' | 'success' | 'info' | 'warning' | 'danger'
+
+// States in the order the dashboard groups them: those needing attention
+// first. OFFLINE and unknown are not printer states but keys in state.*.
+export const STATE_ORDER = ['FAILED', 'PAUSE', 'RUNNING', 'PREPARE', 'FINISH', 'IDLE', 'unknown', 'OFFLINE']
+
+export const STATE_TYPES: Record<string, StateTagType> = {
+  RUNNING: 'primary',
+  PREPARE: 'warning',
+  PAUSE: 'warning',
+  FINISH: 'success',
+  FAILED: 'danger',
+}
+
+export const STATE_ICONS: Record<string, IconName> = {
+  IDLE: 'moon',
+  PREPARE: 'gears',
+  RUNNING: 'print',
+  PAUSE: 'pause',
+  FINISH: 'circle-check',
+  FAILED: 'circle-xmark',
+  OFFLINE: 'plug-circle-xmark',
+  unknown: 'circle-question',
+}
+
+// stateKey returns the printer's state, OFFLINE when it is not connected and
+// unknown for a state missing from STATE_ORDER.
+export function stateKey(p: PrinterInfo): string {
+  if (!p.online) {
+    return 'OFFLINE'
+  }
+  return STATE_ORDER.includes(p.status.state) ? p.status.state : 'unknown'
+}

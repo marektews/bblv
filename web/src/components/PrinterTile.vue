@@ -15,7 +15,7 @@ const stage = computed(() => (active.value ? stageName(status.value.stage, local
 </script>
 
 <template>
-  <router-link :to="`/printer/${encodeURIComponent(printer.id)}`">
+  <router-link :to="`/printer/${encodeURIComponent(printer.id)}`" class="tile-link">
     <el-card shadow="hover" class="tile" body-class="tile-body">
       <div class="thumb">
         <img v-if="printer.geometry.thumbnail" :src="thumbnailUrl(printer)" alt="" />
@@ -35,8 +35,8 @@ const stage = computed(() => (active.value ? stageName(status.value.stage, local
         <div v-if="status.subtask" class="file" :title="status.subtask">{{ status.subtask }}</div>
         <template v-if="active">
           <el-progress :percentage="status.percent" />
-          <div class="meta">
-            <span><fa-icon icon="layer-group" class="ic" />{{ t('status.layer') }} {{ status.layer }}/{{ status.totalLayers }}</span> ·
+          <div class="meta stats">
+            <span><fa-icon icon="layer-group" class="ic" />{{ t('status.layer') }} {{ status.layer }}/{{ status.totalLayers }}</span>
             <span><fa-icon icon="hourglass-half" class="ic" />{{ t('status.remaining') }} {{ duration(status.remainingMin) }}</span>
           </div>
         </template>
@@ -46,6 +46,16 @@ const stage = computed(() => (active.value ? stageName(status.value.stage, local
 </template>
 
 <style scoped>
+/* Tiles in a grid row share the height of the tallest one. */
+.tile-link {
+  display: block;
+  height: 100%;
+}
+
+.tile {
+  height: 100%;
+}
+
 .tile :deep(.tile-body) {
   display: flex;
   gap: 12px;
@@ -80,10 +90,12 @@ const stage = computed(() => (active.value ? stageName(status.value.stage, local
   width: 100%;
 }
 
+/* A stage name that does not fit next to the tag moves below it. */
 .state {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 4px 6px;
 }
 
 .title {
@@ -104,11 +116,16 @@ const stage = computed(() => (active.value ? stageName(status.value.stage, local
   white-space: nowrap;
 }
 
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+}
+
+/* The whole file name, wrapped also inside long words like a_b_c. */
 .file {
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   font-size: 13px;
 }
 </style>
