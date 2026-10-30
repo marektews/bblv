@@ -3,7 +3,14 @@ package printjob
 import (
 	"archive/zip"
 	"bytes"
+	"errors"
+	"io"
+	"reflect"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/jlaffaye/ftp"
 )
 
 const plateGcode = "; CHANGE_LAYER\n; LAYER_HEIGHT: 0.2\n; LINE_WIDTH: 0.4\nG90\nM83\nG1 X0 Y0 Z0.2\nG1 X10 E1\n"
@@ -68,5 +75,56 @@ func TestPlateOf(t *testing.T) {
 		if got, _ := plateOf(name, "Most_plate_"); got != want {
 			t.Errorf("plateOf(%q) = %d, want %d", name, got, want)
 		}
+	}
+}
+
+// fakeCard is an SD card with files in cache/.
+type fakeCard map[string]string
+
+func (c fakeCard) List(dir string) ([]*ftp.Entry, error) {
+	var out []*ftp.Entry
+	for name, body := range c {
+		out = append(out, &ftp.Entry{Name: name, Size: uint64(len(body)), Time: time.Unix(1700000000, 0)})
+	}
+	return out, nil
+}
+
+func (c fakeCard) Open(p string) (io.ReadCloser, error) {
+	body, ok := c[strings.TrimPrefix(p, "cache/")]
+	if !ok {
+		return nil, errors.New("not found")
+	}
+	return io.NopCloser(strings.NewReader(body)), nil
+}
+
+func TestFind(t *testing.T) {
+	for _, tc := range []struct {
+		name               string
+		card               fakeCard
+		subtask, gcodeFile string
+		want               Files
+	}{
+		{"bbl", fakeCard{
+			"2_Most.bbl":         `{"file path": "/sdcard/cache/Most.3mf", "ams mapping": [1, -1]}`,
+			"Most.3mf":           "3mf",
+			"Most_plate_2.gcode": "gcode",
+		}, "Most", "", Files{Plate: 2, ThreeMF: "cache/Most.3mf", Gcode: "cache/Most_plate_2.gcode", AMSMapping: []int{1, -1}}},
+		{"A1 from the cloud", fakeCard{"Rekaw.3mf": "3mf"},
+			"Rekaw.3mf", "Rekaw.3mf", Files{ThreeMF: "cache/Rekaw.3mf"}},
+		{"X2D and P2S", fakeCard{"Zaslepka.gcode.3mf": "3mf", "Other.gcode.3mf": "3mf"},
+			"Zaslepka", "/data/Metadata/plate_3.gcode", Files{Plate: 3, ThreeMF: "cache/Zaslepka.gcode.3mf"}},
+	} {
+		got, err := Find(tc.card, tc.subtask, tc.gcodeFile)
+		if err != nil {
+			t.Errorf("%s: %v", tc.name, err)
+			continue
+		}
+		got.stamp = ""
+		if !reflect.DeepEqual(*got, tc.want) {
+			t.Errorf("%s: got %+v, want %+v", tc.name, *got, tc.want)
+		}
+	}
+	if _, err := Find(fakeCard{"Other.gcode.3mf": "3mf"}, "Zaslepka", "/data/Metadata/plate_1.gcode"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("missing print: err = %v", err)
 	}
 }

@@ -42,6 +42,9 @@ func (e *PlateError) Error() string {
 //	N_<name>.bbl          JSON with the .3mf path and AMS mapping; N is the plate
 //	<name>.3mf            project with Metadata/plate_N.gcode and plate_N.png
 //	<name>_plate_N.gcode  the plate G-code
+//
+// The X2D and P2S keep only <name>.gcode.3mf there and report the G-code
+// file as the path inside the printer, /data/Metadata/plate_N.gcode.
 type Files struct {
 	Plate      int    // 0 when unknown
 	ThreeMF    string // relative path or ""
@@ -55,9 +58,15 @@ type bbl struct {
 	AMSMapping []int  `json:"ams mapping"`
 }
 
+// sdCard is the part of ftps.Conn that Find needs.
+type sdCard interface {
+	List(dir string) ([]*ftp.Entry, error)
+	Open(path string) (io.ReadCloser, error)
+}
+
 // Find locates the files of the print named subtask (subtask_name in the
 // reports); gcodeFile (gcode_file) is used when there is no .bbl file.
-func Find(c *ftps.Conn, subtask, gcodeFile string) (*Files, error) {
+func Find(c sdCard, subtask, gcodeFile string) (*Files, error) {
 	entries, err := c.List("cache")
 	if err != nil {
 		return nil, err
@@ -106,6 +115,14 @@ func Find(c *ftps.Conn, subtask, gcodeFile string) (*Files, error) {
 			f.ThreeMF = "cache/" + gcodeFile
 		} else {
 			f.ThreeMF = ftps.Path(gcodeFile)
+		}
+	}
+	if f.ThreeMF == "" {
+		if e, found := byName[subtask+".gcode.3mf"]; found {
+			f.ThreeMF = "cache/" + e.Name
+			if n, ok := plateOf(path.Base(gcodeFile), "plate_"); ok && f.Plate == 0 {
+				f.Plate = n
+			}
 		}
 	}
 	if f.ThreeMF == "" && f.Gcode == "" {
@@ -312,7 +329,7 @@ func readZip(zr *zip.Reader, name string) ([]byte, error) {
 	return io.ReadAll(f)
 }
 
-func readAll(c *ftps.Conn, p string, limit int64) ([]byte, error) {
+func readAll(c sdCard, p string, limit int64) ([]byte, error) {
 	rc, err := c.Open(p)
 	if err != nil {
 		return nil, err
