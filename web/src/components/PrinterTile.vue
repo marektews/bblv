@@ -12,6 +12,19 @@ const { duration } = useFormat()
 const status = computed(() => props.printer.status)
 const active = computed(() => props.printer.online && ACTIVE_STATES.includes(status.value.state))
 const stage = computed(() => (active.value ? stageName(status.value.stage, locale.value) : ''))
+
+// Alerts of a connected printer, shown as one icon in the colour of the most
+// severe; the printer view describes them. hms is null until the first report.
+const alertCount = computed(() => (props.printer.online ? (status.value.printError ? 1 : 0) + (status.value.hms?.length ?? 0) : 0))
+const alertLevel = computed(() => {
+  // The third part of an HMS code is its severity: 1 fatal, 2 serious, 3 common, 4 info.
+  const levels = (status.value.hms ?? []).map((code) => parseInt(code.split('_')[2] ?? '', 16))
+  if (status.value.printError || levels.some((l) => l === 1 || l === 2)) {
+    return 'error'
+  }
+  return levels.every((l) => l === 4) ? 'info' : 'warning'
+})
+const alertIcons = { error: 'circle-exclamation', warning: 'triangle-exclamation', info: 'circle-info' } as const
 </script>
 
 <template>
@@ -27,6 +40,10 @@ const stage = computed(() => (active.value ? stageName(status.value.stage, local
           <el-tag v-if="printer.experimental" type="warning" size="small">
             <fa-icon icon="flask" class="ic" />{{ t('printer.experimental') }}
           </el-tag>
+          <span v-if="alertCount" :class="['alert', `is-${alertLevel}`]" :title="`${t('status.alerts')}: ${alertCount}`">
+            <fa-icon :icon="alertIcons[alertLevel]" />
+            <span v-if="alertCount > 1" class="alert-count">{{ alertCount }}</span>
+          </span>
         </div>
         <div class="state">
           <StateTag :printer="printer" />
@@ -99,10 +116,37 @@ const stage = computed(() => (active.value ? stageName(status.value.stage, local
 }
 
 .title {
+  align-self: stretch;
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+/* In the top right corner of the tile. */
+.alert {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 16px;
+}
+
+.alert.is-error {
+  color: var(--el-color-danger);
+}
+
+.alert.is-warning {
+  color: var(--el-color-warning);
+}
+
+.alert.is-info {
+  color: var(--el-color-info);
+}
+
+.alert-count {
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .model,
