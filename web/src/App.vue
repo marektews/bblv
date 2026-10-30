@@ -29,7 +29,8 @@ async function signOut() {
       </el-tag>
       <template v-if="auth.state === 'ok'">
         <el-switch v-if="route.path === '/'" v-model="groupByState" size="small" :active-text="t('app.groupByState')" />
-        <router-link to="/settings" class="nav"><fa-icon icon="gear" class="ic" />{{ t('app.settings') }}</router-link>
+        <router-link v-if="route.path === '/settings'" to="/" class="nav"><fa-icon icon="arrow-left" class="ic" />{{ t('printer.back') }}</router-link>
+        <router-link v-else to="/settings" class="nav"><fa-icon icon="gear" class="ic" />{{ t('app.settings') }}</router-link>
         <el-button v-if="auth.required" link size="small" @click="signOut">
           <fa-icon icon="right-from-bracket" class="ic" />{{ t('app.logout') }}
         </el-button>
