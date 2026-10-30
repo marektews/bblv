@@ -18,9 +18,16 @@ import {
 import PrinterDialog from '../components/PrinterDialog.vue'
 import { auth, printers } from '../store'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 // Connection state from the event stream; a printer is missing until the server reports it.
 const onlineById = computed(() => new Map(printers.value.map((p) => [p.id, p.online])))
+
+// Names and addresses sort naturally (A1#2 before A1#10, 192.168.4.40 before
+// 192.168.4.212); serial numbers character by character.
+const natural = computed(() => new Intl.Collator(locale.value, { numeric: true, sensitivity: 'base' }))
+const byName = (a: PrinterConfig, b: PrinterConfig) => natural.value.compare(a.name, b.name)
+const byHost = (a: PrinterConfig, b: PrinterConfig) => natural.value.compare(a.host, b.host)
+const bySerial = (a: PrinterConfig, b: PrinterConfig) => a.serial.localeCompare(b.serial)
 const config = ref<AppConfig | null>(null)
 const discovered = ref<DiscoveredPrinter[]>([])
 const discoveryError = ref('')
@@ -155,10 +162,10 @@ async function changePassword(remove = false) {
         <el-button size="small" @click="openNew()"><fa-icon icon="plus" class="ic" />{{ t('settings.addManually') }}</el-button>
       </div>
       <el-table :data="config?.printers ?? []" :empty-text="t('settings.noPrinters')" size="small">
-        <el-table-column prop="name" :label="t('settings.name')" min-width="140" />
+        <el-table-column prop="name" :label="t('settings.name')" min-width="140" sortable :sort-method="byName" />
         <el-table-column prop="model" :label="t('settings.model')" width="100" />
-        <el-table-column prop="host" :label="t('settings.host')" width="140" />
-        <el-table-column prop="serial" :label="t('settings.serial')" min-width="150" />
+        <el-table-column prop="host" :label="t('settings.host')" width="140" sortable :sort-method="byHost" />
+        <el-table-column prop="serial" :label="t('settings.serial')" min-width="150" sortable :sort-method="bySerial" />
         <el-table-column :label="t('settings.accessCode')" width="130">
           <template #default="{ row }">
             <el-tag :type="row.hasAccessCode ? 'success' : 'danger'" size="small">
