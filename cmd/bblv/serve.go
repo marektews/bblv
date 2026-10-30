@@ -71,12 +71,12 @@ func serve(ctx context.Context, o serveOptions) error {
 		slog.Warn("filament names not loaded", "err", err)
 	}
 	if o.replay != "" {
-		if err := mon.AddReplay(o.replay, o.speed); err != nil {
+		if err = mon.AddReplay(o.replay, o.speed); err != nil {
 			return err
 		}
 		if o.replayModel != "" {
-			res, err := printjob.BuildFile(o.replayModel, 0, store)
-			if err != nil {
+			var res *printjob.Result
+			if res, err = printjob.BuildFile(o.replayModel, 0, store); err != nil {
 				return err
 			}
 			mon.Upload("replay", res)
@@ -105,12 +105,12 @@ func serve(ctx context.Context, o serveOptions) error {
 	}
 	go func() {
 		<-ctx.Done()
-		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
+		shutdown, stop := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stop()
 		srv.Shutdown(shutdown)
 	}()
 	slog.Info("listening", "addr", o.listen, "data", o.dataDir, "version", version)
-	if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+	if err = srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
 	return nil
