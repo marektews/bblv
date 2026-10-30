@@ -29,7 +29,7 @@ the local network in cloud mode, which is all bblv reads.
 | A1 | tested |
 | A1 mini, P1P, P1S | experimental: same protocol as the A1, not tested |
 | X1, X1C, X1E | experimental; the camera needs `ffmpeg` in `PATH` |
-| H2D, H2S | experimental; the camera needs `ffmpeg`; dual nozzles are not shown separately |
+| H2D, H2S | tested, except the camera, which needs `ffmpeg` and LAN live view enabled on the printer; dual nozzles are not shown separately |
 | X2D, P2S | tested, except the camera, which needs `ffmpeg` and LAN live view enabled on the printer |
 
 If you own an experimental model, a recording of a print helps a lot — see

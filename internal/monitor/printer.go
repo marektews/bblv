@@ -24,8 +24,8 @@ const (
 )
 
 // testedModels are verified on real hardware; the others are experimental.
-// The camera of the X2D and P2S is not verified yet.
-var testedModels = []string{"A1", "X2D", "P2S"}
+// The camera of the X2D, P2S, H2D and H2S is not verified yet.
+var testedModels = []string{"A1", "X2D", "P2S", "H2D", "H2S"}
 
 // Printer is the runtime state of one monitored printer.
 type Printer struct {
