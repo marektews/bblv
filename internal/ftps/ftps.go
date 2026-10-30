@@ -19,8 +19,11 @@ type Conn struct {
 // Dial connects to the printer on port 990 and logs in as bblp.
 func Dial(ctx context.Context, host, accessCode string) (*Conn, error) {
 	// Same private Bambu CA as MQTT; the session cache lets data connections
-	// resume the control connection's TLS session.
-	tc := &tls.Config{InsecureSkipVerify: true, ClientSessionCache: tls.NewLRUClientSessionCache(0)}
+	// resume the control connection's TLS session, which the X2D and P2S
+	// require ("522 SSL connection failed: session reuse required"). Sessions
+	// are cached under ServerName, or under host:port when it is empty, and
+	// every data connection uses another port.
+	tc := &tls.Config{InsecureSkipVerify: true, ServerName: host, ClientSessionCache: tls.NewLRUClientSessionCache(0)}
 	c, err := ftp.Dial(host+":990",
 		ftp.DialWithContext(ctx),
 		ftp.DialWithTLS(tc),
