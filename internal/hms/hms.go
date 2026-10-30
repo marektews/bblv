@@ -4,13 +4,13 @@
 package hms
 
 import (
-	"compress/gzip"
 	"embed"
-	"encoding/json"
 	"log/slog"
 	"net/url"
 	"strings"
 	"sync"
+
+	"github.com/marektews/bblv/internal/hms/hmsfile"
 )
 
 //go:embed data/*.json.gz
@@ -22,36 +22,22 @@ const (
 	KindError = "error" // 8 hex digits from print_error
 )
 
-// table maps a code to texts by serial prefix; "" holds the default text.
-type table map[string]map[string]string
-
-type file struct {
-	Version string `json:"version"`
-	HMS     table  `json:"hms"`
-	Errors  table  `json:"errors"`
-}
-
 var (
 	mu    sync.Mutex
-	files = map[string]*file{}
+	files = map[string]*hmsfile.File{}
 )
 
-func load(lang string) *file {
+func load(lang string) *hmsfile.File {
 	mu.Lock()
 	defer mu.Unlock()
 	if f, ok := files[lang]; ok {
 		return f
 	}
-	var f *file
-	if r, err := data.Open("data/hms_" + lang + ".json.gz"); err == nil {
+	var f *hmsfile.File
+	if r, err := data.Open("data/" + hmsfile.Name(lang)); err == nil {
 		defer r.Close()
-		var gz *gzip.Reader
-		if gz, err = gzip.NewReader(r); err == nil {
-			f = &file{}
-			if err = json.NewDecoder(gz).Decode(f); err != nil {
-				slog.Error("invalid HMS table", "lang", lang, "err", err)
-				f = nil
-			}
+		if f, err = hmsfile.Decode(r); err != nil {
+			slog.Error("invalid HMS table", "lang", lang, "err", err)
 		}
 	}
 	files[lang] = f

@@ -6,7 +6,6 @@
 package main
 
 import (
-	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -15,6 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/marektews/bblv/internal/hms/hmsfile"
 )
 
 // Bambu Studio asks for descriptions per printer type, identified by the
@@ -44,15 +45,6 @@ type response struct {
 		DeviceHMS   map[string]json.RawMessage `json:"device_hms"`
 		DeviceError map[string]json.RawMessage `json:"device_error"`
 	} `json:"data"`
-}
-
-// table maps a code to texts by serial prefix; "" holds the most common text.
-type table map[string]map[string]string
-
-type file struct {
-	Version string `json:"version"`
-	HMS     table  `json:"hms"`
-	Errors  table  `json:"errors"`
 }
 
 func main() {
@@ -95,8 +87,8 @@ func main() {
 			log.Printf("%s %s: done", lang, prefix)
 			time.Sleep(500 * time.Millisecond)
 		}
-		f := file{Version: version, HMS: pack(hms), Errors: pack(errs)}
-		path := filepath.Join(out, "hms_"+lang+".json.gz")
+		f := hmsfile.File{Version: version, HMS: pack(hms), Errors: pack(errs)}
+		path := filepath.Join(out, hmsfile.Name(lang))
 		if err := write(path, f); err != nil {
 			log.Fatal(err)
 		}
@@ -149,8 +141,8 @@ func entries(raw map[string]json.RawMessage, lang string) ([]entry, string, erro
 
 // pack keeps the most common text of each code as the default and the other
 // texts only for the printer types that use them.
-func pack(in map[string]map[string]string) table {
-	out := table{}
+func pack(in map[string]map[string]string) hmsfile.Table {
+	out := hmsfile.Table{}
 	for code, byPrefix := range in {
 		count := map[string]int{}
 		for _, text := range byPrefix {
@@ -173,21 +165,12 @@ func pack(in map[string]map[string]string) table {
 	return out
 }
 
-func write(path string, f file) error {
-	b, err := json.Marshal(f)
-	if err != nil {
-		return err
-	}
+func write(path string, f hmsfile.File) error {
 	out, err := os.Create(path)
 	if err != nil {
 		return err
 	}
-	gz, _ := gzip.NewWriterLevel(out, gzip.BestCompression)
-	if _, err = gz.Write(b); err != nil {
-		out.Close()
-		return err
-	}
-	if err = gz.Close(); err != nil {
+	if err = hmsfile.Encode(out, f); err != nil {
 		out.Close()
 		return err
 	}
