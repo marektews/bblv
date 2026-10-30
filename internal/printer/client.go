@@ -6,11 +6,13 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/eclipse/paho.mqtt.golang/packets"
 
 	"github.com/marektews/bblv/internal/config"
 )
@@ -76,9 +78,17 @@ func (c *Client) Connect(ctx context.Context) error {
 		return ctx.Err()
 	}
 	if err := t.Error(); err != nil {
-		return fmt.Errorf("connect to %s: %w (check the access code and that LAN mode / Developer Mode is enabled)", c.p.Host, err)
+		return fmt.Errorf("connect to %s: %w (%s)", c.p.Host, err, connectHint(err))
 	}
 	return nil
+}
+
+// connectHint tells what to check after a failed connection.
+func connectHint(err error) string {
+	if errors.Is(err, packets.ErrorRefusedBadUsernameOrPassword) || errors.Is(err, packets.ErrorRefusedNotAuthorised) {
+		return "check the access code"
+	}
+	return "check that the printer is on and its address is right; TCP port 8883 must be reachable"
 }
 
 // Close disconnects from the printer.
