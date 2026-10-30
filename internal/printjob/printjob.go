@@ -71,13 +71,16 @@ func Find(c sdCard, subtask, gcodeFile string) (*Files, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The A1 may report the subtask as "<name>.3mf", and its gcode_file is
+	// empty once the print has finished.
+	name := strings.TrimSuffix(subtask, ".3mf")
 	byName := map[string]*ftp.Entry{}
 	var meta *ftp.Entry
 	f := &Files{}
 	for _, e := range entries {
 		byName[e.Name] = e
 		num, rest, ok := strings.Cut(e.Name, "_")
-		if !ok || rest != subtask+".bbl" {
+		if !ok || rest != name+".bbl" {
 			continue
 		}
 		if n, err := strconv.Atoi(num); err == nil && (meta == nil || e.Time.After(meta.Time)) {
@@ -85,7 +88,7 @@ func Find(c sdCard, subtask, gcodeFile string) (*Files, error) {
 		}
 	}
 
-	base := subtask
+	base := name
 	if meta != nil {
 		var b bbl
 		if data, err := readAll(c, "cache/"+meta.Name, 1<<20); err == nil && json.Unmarshal(data, &b) == nil {

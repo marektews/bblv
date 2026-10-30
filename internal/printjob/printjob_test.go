@@ -111,6 +111,11 @@ func TestFind(t *testing.T) {
 		}, "Most", "", Files{Plate: 2, ThreeMF: "cache/Most.3mf", Gcode: "cache/Most_plate_2.gcode", AMSMapping: []int{1, -1}}},
 		{"A1 from the cloud", fakeCard{"Rekaw.3mf": "3mf"},
 			"Rekaw.3mf", "Rekaw.3mf", Files{ThreeMF: "cache/Rekaw.3mf"}},
+		{"A1 finished", fakeCard{
+			"1_Rekaw.bbl":         `{"file path": "/sdcard/cache/Rekaw.3mf"}`,
+			"Rekaw.3mf":           "3mf",
+			"Rekaw_plate_1.gcode": "gcode",
+		}, "Rekaw.3mf", "", Files{Plate: 1, ThreeMF: "cache/Rekaw.3mf", Gcode: "cache/Rekaw_plate_1.gcode"}},
 		{"X2D and P2S", fakeCard{"Zaslepka.gcode.3mf": "3mf", "Other.gcode.3mf": "3mf"},
 			"Zaslepka", "/data/Metadata/plate_3.gcode", Files{Plate: 3, ThreeMF: "cache/Zaslepka.gcode.3mf"}},
 	} {
