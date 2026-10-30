@@ -116,6 +116,8 @@ const pl: Messages = {
     accessCodeHint: 'Widoczny na ekranie drukarki w trybie LAN Only albo do zaimportowania z Bambu Studio (poniżej).',
     codeSet: 'Ustawiony',
     codeMissing: 'Brak',
+    connection: 'Połączenie',
+    online: 'Online',
     required: 'Wymagane',
     edit: 'Edytuj',
     delete: 'Usuń',

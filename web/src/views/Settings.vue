@@ -16,9 +16,11 @@ import {
   type PrinterInput,
 } from '../api'
 import PrinterDialog from '../components/PrinterDialog.vue'
-import { auth } from '../store'
+import { auth, printers } from '../store'
 
 const { t } = useI18n()
+// Connection state from the event stream; a printer is missing until the server reports it.
+const onlineById = computed(() => new Map(printers.value.map((p) => [p.id, p.online])))
 const config = ref<AppConfig | null>(null)
 const discovered = ref<DiscoveredPrinter[]>([])
 const discoveryError = ref('')
@@ -163,6 +165,15 @@ async function changePassword(remove = false) {
               <fa-icon :icon="row.hasAccessCode ? 'key' : 'xmark'" class="ic" />
               {{ row.hasAccessCode ? t('settings.codeSet') : t('settings.codeMissing') }}
             </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('settings.connection')" width="120">
+          <template #default="{ row }">
+            <el-tag v-if="onlineById.has(row.id)" :type="onlineById.get(row.id) ? 'success' : 'info'" size="small">
+              <fa-icon :icon="onlineById.get(row.id) ? 'circle-check' : 'plug-circle-xmark'" class="ic" />
+              {{ onlineById.get(row.id) ? t('settings.online') : t('state.OFFLINE') }}
+            </el-tag>
+            <span v-else>—</span>
           </template>
         </el-table-column>
         <el-table-column width="200" align="right">

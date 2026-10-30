@@ -114,6 +114,8 @@ const en = {
     accessCodeHint: 'Shown on the printer screen in LAN Only Mode, or import it from Bambu Studio below.',
     codeSet: 'Set',
     codeMissing: 'Missing',
+    connection: 'Connection',
+    online: 'Online',
     required: 'Required',
     edit: 'Edit',
     delete: 'Delete',
