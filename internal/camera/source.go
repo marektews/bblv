@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/url"
 	"os/exec"
+	"strings"
 	"time"
 )
 
@@ -21,6 +22,31 @@ const maxFrame = 10 << 20
 
 // Source delivers JPEG frames until ctx is cancelled or the stream fails.
 type Source func(ctx context.Context, frame func([]byte)) error
+
+// Causes of camera failures that the UI explains; see Code.
+var (
+	ErrLiveViewDisabled = errors.New("LAN live view is disabled on the printer")
+	ErrNoFFmpeg         = errors.New("ffmpeg is not installed on the server")
+	ErrRefused          = errors.New("camera refused the stream")
+	ErrRTSPUnreachable  = errors.New("RTSP port is not reachable")
+)
+
+// Code names the cause of a camera error for the UI, "" for nil.
+func Code(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, ErrLiveViewDisabled):
+		return "liveview-disabled"
+	case errors.Is(err, ErrNoFFmpeg):
+		return "ffmpeg-missing"
+	case errors.Is(err, ErrRefused):
+		return "refused"
+	case errors.Is(err, ErrRTSPUnreachable):
+		return "rtsp-unreachable"
+	}
+	return "stream"
+}
 
 // Port6000 streams the camera of A1 and P1 printers: TLS on port 6000, an
 // 80 byte login packet, then frames of a 16 byte header and a JPEG image.
@@ -70,7 +96,7 @@ func stream6000(ctx context.Context, addr, accessCode string, frame func([]byte)
 			// Printers without this stream answer the login with a status
 			// packet such as ff ff ff ff 00 00 00 00 and close the connection.
 			if size == 8 {
-				return fmt.Errorf("camera refused the stream (status %d)", int32(binary.LittleEndian.Uint32(img)))
+				return fmt.Errorf("%w (status %d)", ErrRefused, int32(binary.LittleEndian.Uint32(img)))
 			}
 			return errors.New("frame is not a JPEG image")
 		}
@@ -79,24 +105,56 @@ func stream6000(ctx context.Context, addr, accessCode string, frame func([]byte)
 }
 
 // FFmpeg streams the RTSP camera of X1, X2, H2 and P2 printers through
-// ffmpeg, which converts it to JPEG frames at about two per second.
-func FFmpeg(ffmpeg, host, accessCode string) Source {
+// ffmpeg, which converts it to JPEG frames at about two per second. reported
+// returns ipcam.rtsp_url from the printer's last report; ffmpeg is "" when it
+// is not installed.
+func FFmpeg(ffmpeg, host, accessCode string, reported func() string) Source {
 	return func(ctx context.Context, frame func([]byte)) error {
-		return streamRTSP(ctx, ffmpeg, net.JoinHostPort(host, "322"), accessCode, frame)
+		u, err := rtspURL(reported(), host)
+		if err != nil {
+			return err
+		}
+		if ffmpeg == "" {
+			return ErrNoFFmpeg
+		}
+		u.User = url.UserPassword("bblp", accessCode)
+		return streamRTSP(ctx, ffmpeg, u, frame)
 	}
 }
 
-func streamRTSP(ctx context.Context, ffmpeg, addr, accessCode string, frame func([]byte)) error {
+// rtspURL turns the reported ipcam.rtsp_url ("disable" while LAN live view is
+// off) into the stream address at the configured host, which the server
+// reaches the printer by; before the first report it assumes the usual one.
+func rtspURL(reported, host string) (*url.URL, error) {
+	if reported == "disable" {
+		return nil, ErrLiveViewDisabled
+	}
+	u := &url.URL{Scheme: "rtsps", Path: "/streaming/live/1"}
+	port := ""
+	if reported != "" {
+		r, err := url.Parse(reported)
+		if err != nil {
+			return nil, fmt.Errorf("reported RTSP address: %w", err)
+		}
+		u.Scheme, u.Path, u.RawQuery, port = r.Scheme, r.Path, r.RawQuery, r.Port()
+	}
+	if port == "" {
+		port = map[string]string{"rtsps": "322", "rtsp": "554"}[u.Scheme]
+	}
+	u.Host = net.JoinHostPort(host, port)
+	return u, nil
+}
+
+func streamRTSP(ctx context.Context, ffmpeg string, u *url.URL, frame func([]byte)) error {
 	// The printer opens the RTSP port only with LAN live view enabled;
 	// checking it first gives a clearer error than ffmpeg would.
 	d := net.Dialer{Timeout: 10 * time.Second}
-	conn, err := d.DialContext(ctx, "tcp", addr)
+	conn, err := d.DialContext(ctx, "tcp", u.Host)
 	if err != nil {
-		return fmt.Errorf("%w (is LAN live view enabled in the printer's settings?)", err)
+		return fmt.Errorf("%w: %w", ErrRTSPUnreachable, err)
 	}
 	conn.Close()
 
-	u := url.URL{Scheme: "rtsps", User: url.UserPassword("bblp", accessCode), Host: addr, Path: "/streaming/live/1"}
 	cmd := exec.CommandContext(ctx, ffmpeg, "-loglevel", "error", "-rtsp_transport", "tcp", "-i", u.String(),
 		"-an", "-r", "2", "-f", "image2pipe", "-c:v", "mjpeg", "-q:v", "5", "pipe:1")
 	out, err := cmd.StdoutPipe()
@@ -110,7 +168,13 @@ func streamRTSP(ctx context.Context, ffmpeg, addr, accessCode string, frame func
 	}
 	err = splitJPEG(out, frame)
 	if werr := cmd.Wait(); werr != nil && ctx.Err() == nil {
-		return fmt.Errorf("ffmpeg: %w: %s", werr, bytes.TrimSpace(stderr.Bytes()))
+		// ffmpeg repeats the URL in its messages, which end up in the log and
+		// the browser; the access code in it must not.
+		msg := string(bytes.TrimSpace(stderr.Bytes()))
+		if pw, ok := u.User.Password(); ok && pw != "" {
+			msg = strings.ReplaceAll(msg, pw, "***")
+		}
+		return fmt.Errorf("ffmpeg: %w: %s", werr, msg)
 	}
 	return err
 }

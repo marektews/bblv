@@ -43,6 +43,10 @@ export interface Status {
   ams: AMSUnit[]
   activeTray: number // unit*4+slot, 254 = external spool, -1 = none
   external: Tray | null
+  sdCard: boolean
+  sdTotalKb: number // 0 when not reported
+  sdFreeKb: number
+  lanLiveView: '' | 'enabled' | 'disabled' // '' for printers without an RTSP camera
 }
 
 export type GeometryState = 'none' | 'loading' | 'ready' | 'missing' | 'error'
@@ -65,6 +69,10 @@ export interface PrinterInfo {
   experimental: boolean
   online: boolean
   camera: boolean
+  // Why the camera does not work: liveview-disabled, ffmpeg-missing, refused,
+  // rtsp-unreachable or stream; cameraDetail is the server's message.
+  cameraError?: string
+  cameraDetail?: string
   status: Status
   geometry: Geometry
 }

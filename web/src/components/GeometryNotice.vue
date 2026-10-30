@@ -15,7 +15,8 @@ const alert = computed(() => {
     case 'loading':
       return { type: 'info' as const, text: t('geometry.loading') }
     case 'missing':
-      return { type: 'warning' as const, text: t('geometry.missing') }
+      // Without a card the printer keeps the print in memory the server cannot read.
+      return { type: 'warning' as const, text: props.printer.status.sdCard ? t('geometry.missing') : t('geometry.missingNoSd') }
     case 'error':
       return { type: 'error' as const, text: t('geometry.error', { msg: geometry.value.error ?? '' }) }
     case 'none':

@@ -19,8 +19,8 @@ import PrinterDialog from '../components/PrinterDialog.vue'
 import { auth, printers } from '../store'
 
 const { t, locale } = useI18n()
-// Connection state from the event stream; a printer is missing until the server reports it.
-const onlineById = computed(() => new Map(printers.value.map((p) => [p.id, p.online])))
+// Live state from the event stream; a printer is missing until the server reports it.
+const liveById = computed(() => new Map(printers.value.map((p) => [p.id, p])))
 
 // Names and addresses sort naturally (A1#2 before A1#10, 192.168.4.40 before
 // 192.168.4.212); serial numbers character by character.
@@ -210,9 +210,18 @@ async function changePassword(remove = false) {
         </el-table-column>
         <el-table-column :label="t('settings.connection')" width="120">
           <template #default="{ row }">
-            <el-tag v-if="onlineById.has(row.id)" :type="onlineById.get(row.id) ? 'success' : 'info'" size="small">
-              <fa-icon :icon="onlineById.get(row.id) ? 'circle-check' : 'plug-circle-xmark'" class="ic" />
-              {{ onlineById.get(row.id) ? t('settings.online') : t('state.OFFLINE') }}
+            <el-tag v-if="liveById.has(row.id)" :type="liveById.get(row.id)!.online ? 'success' : 'info'" size="small">
+              <fa-icon :icon="liveById.get(row.id)!.online ? 'circle-check' : 'plug-circle-xmark'" class="ic" />
+              {{ liveById.get(row.id)!.online ? t('settings.online') : t('state.OFFLINE') }}
+            </el-tag>
+            <span v-else>—</span>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('status.sdCard')" width="100">
+          <template #default="{ row }">
+            <el-tag v-if="liveById.get(row.id)?.online" :type="liveById.get(row.id)!.status.sdCard ? 'success' : 'warning'" size="small">
+              <fa-icon :icon="liveById.get(row.id)!.status.sdCard ? 'sd-card' : 'xmark'" class="ic" />
+              {{ liveById.get(row.id)!.status.sdCard ? t('status.sdYes') : t('status.sdNone') }}
             </el-tag>
             <span v-else>—</span>
           </template>

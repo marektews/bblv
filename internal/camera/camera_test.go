@@ -9,9 +9,11 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/binary"
+	"errors"
 	"io"
 	"math/big"
 	"net"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -124,9 +126,62 @@ func TestStreamRTSPClosedPort(t *testing.T) {
 	ln.Close()
 
 	// ffmpeg must not be started when the port is closed.
-	err = streamRTSP(context.Background(), "/nonexistent/ffmpeg", addr, "12345678", func([]byte) {})
-	if err == nil || !strings.Contains(err.Error(), "LAN live view") {
+	u := &url.URL{Scheme: "rtsps", Host: addr, Path: "/streaming/live/1"}
+	err = streamRTSP(context.Background(), "/nonexistent/ffmpeg", u, func([]byte) {})
+	if !errors.Is(err, ErrRTSPUnreachable) || Code(err) != "rtsp-unreachable" {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestRTSPURL(t *testing.T) {
+	for reported, want := range map[string]string{
+		"":                                      "rtsps://10.0.0.5:322/streaming/live/1",
+		"rtsps://192.168.4.44/streaming/live/1": "rtsps://10.0.0.5:322/streaming/live/1",
+		"rtsps://192.168.4.44:8322/streaming/x?a": "rtsps://10.0.0.5:8322/streaming/x?a",
+	} {
+		u, err := rtspURL(reported, "10.0.0.5")
+		if err != nil || u.String() != want {
+			t.Errorf("rtspURL(%q) = %v, %v; want %s", reported, u, err, want)
+		}
+	}
+	if _, err := rtspURL("disable", "10.0.0.5"); Code(err) != "liveview-disabled" {
+		t.Errorf("disabled: err = %v", err)
+	}
+}
+
+func TestFFmpegReportsWhyItCannotStart(t *testing.T) {
+	for _, tc := range []struct {
+		ffmpeg, reported, code string
+	}{
+		{"/usr/bin/ffmpeg", "disable", "liveview-disabled"},
+		{"", "", "ffmpeg-missing"},
+	} {
+		src := FFmpeg(tc.ffmpeg, "10.0.0.5", "12345678", func() string { return tc.reported })
+		if err := src(context.Background(), func([]byte) {}); Code(err) != tc.code {
+			t.Errorf("ffmpeg=%q reported=%q: err = %v, want %s", tc.ffmpeg, tc.reported, err, tc.code)
+		}
+	}
+}
+
+func TestHubReportsErrorsUntilFramesArrive(t *testing.T) {
+	var calls atomic.Int32
+	h := NewHub("test", func(ctx context.Context, frame func([]byte)) error {
+		if calls.Add(1) == 1 {
+			return ErrRefused
+		}
+		frame([]byte("img"))
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	h.retry = time.Millisecond
+	var changes atomic.Int32
+	h.OnChange(func() { changes.Add(1) })
+
+	_, unsub := h.Subscribe()
+	defer unsub()
+	waitFor(t, func() bool { return changes.Load() == 2 }) // failed, then recovered
+	if err := h.Err(); err != nil {
+		t.Fatalf("err = %v after a frame", err)
 	}
 }
 

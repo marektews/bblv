@@ -4,7 +4,18 @@ import { useI18n } from 'vue-i18n'
 import type { PrinterInfo } from '../api'
 
 const props = defineProps<{ printer: PrinterInfo }>()
-const { t } = useI18n()
+const { t, te } = useI18n()
+
+// Causes the server knows before the stream is opened, which would only fail.
+const blocked = computed(() => ['liveview-disabled', 'ffmpeg-missing'].includes(props.printer.cameraError ?? ''))
+const errorText = computed(() => {
+  const code = props.printer.cameraError
+  if (!code) {
+    return ''
+  }
+  const key = `camera.errors.${code.replace(/-(\w)/g, (_, c: string) => c.toUpperCase())}`
+  return te(key) ? t(key) : t('camera.errors.stream')
+})
 
 const STORAGE_KEY = 'cameraOpen'
 function initiallyOpen(): boolean {
@@ -28,7 +39,9 @@ const full = computed(() => native.value || pseudo.value)
 
 // The browser closes the MJPEG connection as soon as the image is removed.
 const src = computed(() =>
-  open.value && props.printer.online ? `/api/printers/${encodeURIComponent(props.printer.id)}/camera?a=${attempt.value}` : '',
+  open.value && props.printer.online && !blocked.value
+    ? `/api/printers/${encodeURIComponent(props.printer.id)}/camera?a=${attempt.value}`
+    : '',
 )
 
 watch(open, (v) => {
@@ -114,6 +127,10 @@ onBeforeUnmount(() => {
       </button>
       <div v-if="!loaded" class="hint">
         <template v-if="!printer.online"><fa-icon icon="plug-circle-xmark" class="ic" />{{ t('state.OFFLINE') }}</template>
+        <div v-else-if="errorText" class="note">
+          <span><fa-icon icon="video-slash" class="ic" />{{ errorText }}</span>
+          <span v-if="!blocked && printer.cameraDetail" class="detail">{{ printer.cameraDetail }}</span>
+        </div>
         <template v-else-if="failed"><fa-icon icon="video-slash" class="ic" />{{ t('camera.unavailable') }}</template>
         <template v-else><fa-icon icon="spinner" spin class="ic" />{{ t('camera.connecting') }}</template>
       </div>
@@ -202,5 +219,21 @@ h4 {
   justify-content: center;
   font-size: 12px;
   color: var(--el-text-color-secondary);
+}
+
+.note {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 85%;
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* The server's message, in English. */
+.detail {
+  font-size: 11px;
+  opacity: 0.8;
+  overflow-wrap: anywhere;
 }
 </style>

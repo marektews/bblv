@@ -35,6 +35,7 @@ type Printer struct {
 	src             source
 	fetcher         func(job) Geometry // nil when geometry can only be uploaded
 	camera          *camera.Hub        // nil when the camera is not available
+	rtsp            bool               // the camera streams RTSP through ffmpeg
 	stop            context.CancelFunc // set while running
 	removed         atomic.Bool
 
@@ -97,10 +98,35 @@ func (p *Printer) infoLocked() Info {
 			experimental = false
 		}
 	}
-	return Info{
+	info := Info{
 		ID: p.id, Name: p.name, Model: p.model, Experimental: experimental,
 		Online: p.online, Camera: p.camera != nil, Status: p.status, Geometry: p.geom,
 	}
+	if err := p.cameraErrLocked(); err != nil {
+		info.CameraError, info.CameraDetail = camera.Code(err), err.Error()
+	}
+	return info
+}
+
+// cameraErrLocked tells why the camera does not work. What the printer
+// reports and a missing ffmpeg are known before anyone opens the stream.
+func (p *Printer) cameraErrLocked() error {
+	switch {
+	case p.camera == nil:
+		return nil
+	case p.rtsp && p.status.LANLiveView == "disabled":
+		return camera.ErrLiveViewDisabled
+	case p.rtsp && p.m.ffmpeg == "":
+		return camera.ErrNoFFmpeg
+	}
+	return p.camera.Err()
+}
+
+// reportedRTSP returns ipcam.rtsp_url from the last report.
+func (p *Printer) reportedRTSP() string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.status.RTSPURL
 }
 
 func (p *Printer) onConnection(ok bool) {

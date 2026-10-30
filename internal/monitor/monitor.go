@@ -55,6 +55,8 @@ type Info struct {
 	Experimental bool           `json:"experimental"`
 	Online       bool           `json:"online"`
 	Camera       bool           `json:"camera"`
+	CameraError  string         `json:"cameraError,omitempty"`  // camera.Code of why the camera does not work
+	CameraDetail string         `json:"cameraDetail,omitempty"` // the error message
 	Status       printer.Status `json:"status"`
 	Geometry     Geometry       `json:"geometry"`
 }
@@ -128,25 +130,23 @@ func (m *Monitor) networkPrinter(cfg config.Printer) *Printer {
 	p := newPrinter(m, cfg.ID, cfg.Name, cfg.Model, &mqttSource{cfg: cfg})
 	p.fetcher = p.fetchFTPS
 	p.cfg = cfg
-	if src := m.cameraSource(cfg); src != nil {
-		p.camera = camera.NewHub(cfg.ID, src)
+	p.rtsp = rtspCamera(cfg.Model)
+	src := camera.Port6000(cfg.Host, cfg.AccessCode)
+	if p.rtsp {
+		src = camera.FFmpeg(m.ffmpeg, cfg.Host, cfg.AccessCode, p.reportedRTSP)
 	}
+	p.camera = camera.NewHub(cfg.ID, src)
+	p.camera.OnChange(func() { p.publish(p.info()) })
 	return p
 }
 
-// cameraSource picks how to read the printer camera: X1, X2, H2 and P2
-// printers stream RTSP, which needs ffmpeg; the others use the JPEG stream on
-// port 6000. The X2D and P2S refuse logins on port 6000.
-func (m *Monitor) cameraSource(cfg config.Printer) camera.Source {
-	model := strings.ToUpper(cfg.Model)
-	if strings.HasPrefix(model, "X1") || strings.HasPrefix(model, "X2") ||
-		strings.HasPrefix(model, "H2") || strings.HasPrefix(model, "P2") {
-		if m.ffmpeg == "" {
-			return nil
-		}
-		return camera.FFmpeg(m.ffmpeg, cfg.Host, cfg.AccessCode)
-	}
-	return camera.Port6000(cfg.Host, cfg.AccessCode)
+// rtspCamera tells how to read the printer camera: X1, X2, H2 and P2 printers
+// stream RTSP, which needs ffmpeg; the others use the JPEG stream on port
+// 6000. The X2D, P2S and H2 series refuse logins on port 6000.
+func rtspCamera(model string) bool {
+	model = strings.ToUpper(model)
+	return strings.HasPrefix(model, "X1") || strings.HasPrefix(model, "X2") ||
+		strings.HasPrefix(model, "H2") || strings.HasPrefix(model, "P2")
 }
 
 // AddReplay adds a virtual printer with the id "replay" that plays back a

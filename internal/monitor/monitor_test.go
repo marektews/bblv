@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/marektews/bblv/internal/config"
 	"github.com/marektews/bblv/internal/printer"
 )
 
@@ -102,6 +103,23 @@ func TestStatusBeforeFirstReport(t *testing.T) {
 	for _, want := range []string{`"hms":[]`, `"ams":[]`, `"activeTray":-1`, `"external":null`} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("status %s lacks %s", b, want)
+		}
+	}
+}
+
+func TestCameraErrorFromReport(t *testing.T) {
+	for _, tc := range []struct {
+		model, ffmpeg, liveView, want string
+	}{
+		{"A1", "", "", ""}, // JPEG camera, needs no ffmpeg
+		{"P2S", "/usr/bin/ffmpeg", "disabled", "liveview-disabled"}, // as the printer reports
+		{"H2D", "", "enabled", "ffmpeg-missing"},
+		{"X2D", "/usr/bin/ffmpeg", "enabled", ""}, // not known before the stream runs
+	} {
+		p := New(nil, tc.ffmpeg).networkPrinter(config.Printer{ID: "p", Model: tc.model, Host: "10.0.0.5"})
+		p.status.LANLiveView = tc.liveView
+		if got := p.info().CameraError; got != tc.want {
+			t.Errorf("%s ffmpeg=%q liveView=%q: cameraError = %q, want %q", tc.model, tc.ffmpeg, tc.liveView, got, tc.want)
 		}
 	}
 }

@@ -71,3 +71,26 @@ func TestStatusFansAndAMS(t *testing.T) {
 		t.Errorf("external = %+v", s.External)
 	}
 }
+
+func TestStatusSDCardAndLiveView(t *testing.T) {
+	for _, tc := range []struct {
+		name, msg   string
+		sd          bool
+		total, free int
+		liveView    string
+	}{
+		{"A1", `{"print":{"sdcard":true,"ipcam":{"ipcam_dev":"1"}}}`, true, 0, 0, ""},
+		{"H2D without a card", `{"print":{"sdcard":false,"ipcam":{"rtsp_url":"disable","tl_external_total_kb":0}}}`, false, 0, 0, "disabled"},
+		{"P2S", `{"print":{"sdcard":true,"ipcam":{"rtsp_url":"rtsps://192.168.4.44/streaming/live/1",
+		  "tl_external_total_kb":124984320,"tl_external_free_kb":37268992}}}`, true, 124984320, 37268992, "enabled"},
+	} {
+		var state map[string]any
+		if err := json.Unmarshal([]byte(tc.msg), &state); err != nil {
+			t.Fatal(err)
+		}
+		s := statusFrom(state)
+		if s.SDCard != tc.sd || s.SDTotalKB != tc.total || s.SDFreeKB != tc.free || s.LANLiveView != tc.liveView {
+			t.Errorf("%s: sd=%v %d/%d liveView=%q", tc.name, s.SDCard, s.SDFreeKB, s.SDTotalKB, s.LANLiveView)
+		}
+	}
+}

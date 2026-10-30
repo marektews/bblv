@@ -30,6 +30,13 @@ type Status struct {
 	AMS          []AMS   `json:"ams"`
 	ActiveTray   int     `json:"activeTray"` // unit*4+slot, 254 = external spool, -1 = none
 	External     *Tray   `json:"external"`
+	SDCard       bool    `json:"sdCard"`
+	SDTotalKB    int     `json:"sdTotalKb"` // 0 when not reported
+	SDFreeKB     int     `json:"sdFreeKb"`
+	// LANLiveView is "enabled" or "disabled" for printers with an RTSP
+	// camera, which report ipcam.rtsp_url, and "" for the others.
+	LANLiveView string `json:"lanLiveView"`
+	RTSPURL     string `json:"-"` // ipcam.rtsp_url: "disable" or the stream address
 }
 
 // Fans holds fan speeds in percent.
@@ -129,6 +136,18 @@ func statusFrom(state map[string]any) Status {
 	if vt := obj(p, "vt_tray"); vt != nil {
 		t := trayFrom(vt)
 		s.External = &t
+	}
+
+	// The SD card holds the timelapses, so its size is reported with the camera.
+	s.SDCard, _ = p["sdcard"].(bool)
+	ipcam := obj(p, "ipcam")
+	s.SDTotalKB, s.SDFreeKB = int(num(ipcam, "tl_external_total_kb")), int(num(ipcam, "tl_external_free_kb"))
+	switch s.RTSPURL = str(ipcam, "rtsp_url"); s.RTSPURL {
+	case "":
+	case "disable":
+		s.LANLiveView = "disabled"
+	default:
+		s.LANLiveView = "enabled"
 	}
 
 	if mods, ok := obj(state, "info")["module"].([]any); ok {

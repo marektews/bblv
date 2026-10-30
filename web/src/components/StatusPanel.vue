@@ -17,6 +17,19 @@ const hasChamberFans = computed(() => !props.printer.model.toUpperCase().startsW
 const speed = computed(() => (te(`speed.${s.value.speedLevel}`) ? t(`speed.${s.value.speedLevel}`) : '—'))
 const stage = computed(() => stageName(s.value.stage, locale.value))
 
+// The printer reports the card size in KB, and only with an RTSP camera.
+const gb = (kb: number) => `${(kb / 1024 / 1024).toLocaleString(locale.value, { maximumFractionDigits: 1 })} GB`
+const sdCard = computed(() => {
+  if (!props.printer.online) {
+    return '—'
+  }
+  if (!s.value.sdCard) {
+    return t('status.sdNone')
+  }
+  const free = s.value.sdTotalKb > 0 ? t('status.sdFree', { free: gb(s.value.sdFreeKb), total: gb(s.value.sdTotalKb) }) : ''
+  return free ? `${t('status.sdYes')}, ${free}` : t('status.sdYes')
+})
+
 interface Slot {
   key: string
   label: string
@@ -166,6 +179,14 @@ const slots = computed<Slot[]>(() => {
         <el-descriptions-item>
           <template #label><fa-icon icon="microchip" class="ic" />{{ t('status.firmware') }}</template>
           {{ s.firmware || '—' }}
+        </el-descriptions-item>
+        <el-descriptions-item>
+          <template #label><fa-icon icon="sd-card" class="ic" />{{ t('status.sdCard') }}</template>
+          {{ sdCard }}
+        </el-descriptions-item>
+        <el-descriptions-item v-if="printer.online && s.lanLiveView">
+          <template #label><fa-icon icon="video" class="ic" />{{ t('status.lanLiveView') }}</template>
+          {{ s.lanLiveView === 'enabled' ? t('status.liveViewOn') : t('status.liveViewOff') }}
         </el-descriptions-item>
       </el-descriptions>
     </section>

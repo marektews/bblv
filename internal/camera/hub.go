@@ -17,6 +17,7 @@ type Hub struct {
 	grace    time.Duration
 	retry    time.Duration
 	maxRetry time.Duration
+	onChange func() // called when Err changes
 
 	mu     sync.Mutex
 	subs   map[chan []byte]struct{}
@@ -24,11 +25,26 @@ type Hub struct {
 	cancel context.CancelFunc // set while the source runs
 	idle   *time.Timer
 	closed bool
+	err    error // why the stream last stopped, nil once it delivers frames
 }
 
 // NewHub creates a hub; name identifies the camera in logs.
 func NewHub(name string, source Source) *Hub {
 	return &Hub{name: name, source: source, grace: 10 * time.Second, retry: 5 * time.Second, maxRetry: time.Minute, subs: map[chan []byte]struct{}{}}
+}
+
+// OnChange sets a function called, without the hub locked, when Err changes.
+// It must be set before the first Subscribe.
+func (h *Hub) OnChange(f func()) {
+	h.onChange = f
+}
+
+// Err returns why the stream last stopped; nil once it delivers frames or
+// before it first ran.
+func (h *Hub) Err() error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.err
 }
 
 // Subscribe returns a channel that always holds the newest frame not yet
@@ -103,6 +119,7 @@ func (h *Hub) run(ctx context.Context) {
 		if streamed {
 			delay = h.retry
 		}
+		h.setErr(err)
 		slog.Warn("camera stream stopped, reconnecting", "camera", h.name, "in", delay, "err", err)
 		select {
 		case <-ctx.Done():
@@ -115,7 +132,8 @@ func (h *Hub) run(ctx context.Context) {
 
 func (h *Hub) publish(img []byte) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
+	recovered := h.err != nil
+	h.err = nil
 	h.latest = img
 	for ch := range h.subs {
 		// Replace a frame the viewer has not taken yet; only this function sends.
@@ -124,5 +142,25 @@ func (h *Hub) publish(img []byte) {
 		default:
 		}
 		ch <- img
+	}
+	h.mu.Unlock()
+	if recovered {
+		h.notify()
+	}
+}
+
+func (h *Hub) setErr(err error) {
+	h.mu.Lock()
+	changed := (h.err == nil) != (err == nil) || (err != nil && h.err.Error() != err.Error())
+	h.err = err
+	h.mu.Unlock()
+	if changed {
+		h.notify()
+	}
+}
+
+func (h *Hub) notify() {
+	if h.onChange != nil {
+		h.onChange()
 	}
 }
