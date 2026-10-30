@@ -85,4 +85,11 @@ function connectEvents() {
     const { id } = JSON.parse((e as MessageEvent<string>).data) as { id: string }
     printers.value = printers.value.filter((p) => p.id !== id)
   })
+  // Follows the printers sent on connect: drops those removed while the
+  // stream was down and restores the configuration order.
+  es.addEventListener('ready', (e) => {
+    const ids = JSON.parse((e as MessageEvent<string>).data) as string[]
+    const byId = new Map(printers.value.map((p) => [p.id, p]))
+    printers.value = ids.flatMap((id) => byId.get(id) ?? [])
+  })
 }

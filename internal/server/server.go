@@ -253,7 +253,9 @@ func (s *server) upload(w http.ResponseWriter, r *http.Request) {
 
 // events streams Server-Sent Events: a "printer" event with the printer info
 // for every printer on connect and after every change, and a "removed" event
-// with the id of a printer that is no longer configured.
+// with the id of a printer that is no longer configured. A "ready" event with
+// the ids in configuration order follows the printers sent on connect, so that
+// a client reconnecting drops those removed meanwhile.
 func (s *server) events(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -279,10 +281,16 @@ func (s *server) events(w http.ResponseWriter, r *http.Request) {
 		_, err = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", e.Type, b)
 		return err
 	}
+	ids := []string{}
 	for _, info := range s.mon.Printers() {
 		if emit(monitor.Event{Type: "printer", Info: info}) != nil {
 			return
 		}
+		ids = append(ids, info.ID)
+	}
+	b, _ := json.Marshal(ids)
+	if _, werr := fmt.Fprintf(w, "event: ready\ndata: %s\n\n", b); werr != nil {
+		return
 	}
 	flusher.Flush()
 

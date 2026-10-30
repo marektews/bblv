@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -168,6 +169,14 @@ func TestEvents(t *testing.T) {
 	}
 	if !sc.Scan() || !strings.HasPrefix(sc.Text(), "data: ") || !strings.Contains(sc.Text(), `"subtask":"cube"`) {
 		t.Fatalf("data line %q", sc.Text())
+	}
+	// The printers sent on connect end with their ids.
+	var lines []string
+	for len(lines) < 3 && sc.Scan() {
+		lines = append(lines, sc.Text())
+	}
+	if want := []string{"", "event: ready", `data: ["replay"]`}; !reflect.DeepEqual(lines, want) {
+		t.Fatalf("lines after the printer = %q, want %q", lines, want)
 	}
 }
 
