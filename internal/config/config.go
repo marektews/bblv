@@ -58,7 +58,26 @@ func Load(dataDir string) (*Config, error) {
 	if err := json.Unmarshal(b, &c); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", FileName, err)
 	}
+	if err := c.validate(); err != nil {
+		return nil, fmt.Errorf("%s: %w", FileName, err)
+	}
 	return &c, nil
+}
+
+// validate rejects printers without an id or sharing one; the id selects the
+// printer everywhere, so such printers would hide each other.
+func (c *Config) validate() error {
+	seen := map[string]bool{}
+	for i, p := range c.Printers {
+		if p.ID == "" {
+			return fmt.Errorf("printer %d (host %q) has no id", i+1, p.Host)
+		}
+		if seen[p.ID] {
+			return fmt.Errorf("printer id %q is used more than once", p.ID)
+		}
+		seen[p.ID] = true
+	}
+	return nil
 }
 
 // Save writes config.json atomically (temp file + rename) with owner-only permissions.

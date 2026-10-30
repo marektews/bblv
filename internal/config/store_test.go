@@ -2,6 +2,8 @@ package config
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -40,6 +42,21 @@ func TestNewID(t *testing.T) {
 	} {
 		if got := c.NewID(name); got != want {
 			t.Errorf("NewID(%q) = %q, want %q", name, got, want)
+		}
+	}
+}
+
+func TestLoadRejectsMissingAndDuplicateIDs(t *testing.T) {
+	for name, printers := range map[string]string{
+		"duplicate": `[{"id": "a1", "host": "10.0.0.2"}, {"id": "a1", "host": "10.0.0.3"}]`,
+		"missing":   `[{"id": "a1", "host": "10.0.0.2"}, {"host": "10.0.0.3"}]`,
+	} {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, FileName), []byte(`{"printers": `+printers+`}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if c, err := Load(dir); err == nil {
+			t.Errorf("%s: loaded %+v, want an error", name, c.Printers)
 		}
 	}
 }
