@@ -261,6 +261,9 @@ func (s *mqttSource) run(ctx context.Context, status func(printer.Status), onlin
 	var c *printer.Client
 	c = printer.New(s.cfg, func(printer.Report) { status(c.Status()) })
 	c.OnConnection(online)
+	// Also abandons a connection attempt still in progress, which would
+	// otherwise leave a session open on the printer.
+	defer c.Close()
 	for {
 		err := c.Connect(ctx)
 		if err == nil {
@@ -277,7 +280,6 @@ func (s *mqttSource) run(ctx context.Context, status func(printer.Status), onlin
 		}
 	}
 	<-ctx.Done()
-	c.Close()
 }
 
 type replaySource struct {
