@@ -1,6 +1,8 @@
 package monitor
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -87,5 +89,19 @@ func TestFinishedPrintIsNotRetried(t *testing.T) {
 	}
 	if !p.info().Experimental {
 		t.Error("X1C should be experimental")
+	}
+}
+
+// The UI expects lists, not null, also before the printer's first report.
+func TestStatusBeforeFirstReport(t *testing.T) {
+	p := newPrinter(New(nil, ""), "p", "", "A1", nil)
+	b, err := json.Marshal(p.info().Status)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"hms":[]`, `"ams":[]`, `"activeTray":-1`, `"external":null`} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("status %s lacks %s", b, want)
+		}
 	}
 }

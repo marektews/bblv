@@ -56,7 +56,9 @@ func newPrinter(m *Monitor, id, name, model string, src source) *Printer {
 	if name == "" {
 		name = id
 	}
-	return &Printer{m: m, id: id, name: name, model: model, src: src, geom: Geometry{State: GeometryNone}}
+	// Until the first report the status is that of an empty one, which has
+	// empty lists where the zero Status would give null in the JSON.
+	return &Printer{m: m, id: id, name: name, model: model, src: src, status: printer.NewState().Status(), geom: Geometry{State: GeometryNone}}
 }
 
 func (p *Printer) run(ctx context.Context) {

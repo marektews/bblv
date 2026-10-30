@@ -14,11 +14,11 @@ const active = computed(() => props.printer.online && ACTIVE_STATES.includes(sta
 const stage = computed(() => (active.value ? stageName(status.value.stage, locale.value) : ''))
 
 // Alerts of a connected printer, shown as one icon in the colour of the most
-// severe; the printer view describes them. hms is null until the first report.
-const alertCount = computed(() => (props.printer.online ? (status.value.printError ? 1 : 0) + (status.value.hms?.length ?? 0) : 0))
+// severe; the printer view describes them.
+const alertCount = computed(() => (props.printer.online ? (status.value.printError ? 1 : 0) + status.value.hms.length : 0))
 const alertLevel = computed(() => {
   // The third part of an HMS code is its severity: 1 fatal, 2 serious, 3 common, 4 info.
-  const levels = (status.value.hms ?? []).map((code) => parseInt(code.split('_')[2] ?? '', 16))
+  const levels = status.value.hms.map((code) => parseInt(code.split('_')[2] ?? '', 16))
   if (status.value.printError || levels.some((l) => l === 1 || l === 2)) {
     return 'error'
   }
