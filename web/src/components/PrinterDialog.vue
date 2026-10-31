@@ -4,7 +4,8 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { PrinterConfig, PrinterInput } from '../api'
 
-const MODELS = ['A1', 'A1 mini', 'P1P', 'P1S', 'X1C', 'X1E', 'H2D']
+// The names network discovery gives (internal/discovery).
+const MODELS = ['A1', 'A1 mini', 'A2L', 'P1P', 'P1S', 'P2S', 'X1', 'X1C', 'X1E', 'X2D', 'H2D', 'H2D Pro', 'H2S', 'H2C']
 
 const props = defineProps<{
   // The printer being edited, or the values to start a new one with.

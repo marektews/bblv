@@ -39,6 +39,7 @@ the local network in cloud mode, which is all bblv reads.
 | X1, X1C, X1E | experimental; the camera needs `ffmpeg` in `PATH` |
 | H2D, H2S | tested, except the camera, which needs `ffmpeg` and LAN live view enabled on the printer; dual nozzles are not shown separately |
 | X2D, P2S | tested, except the camera, which needs `ffmpeg` and LAN live view enabled on the printer |
+| H2D Pro, H2C, A2L | experimental: recognised in the network, not tested; the camera of the H2 series needs `ffmpeg` |
 
 If you own an experimental model, a recording of a print helps a lot — see
 [Recording a print](#recording-a-print).

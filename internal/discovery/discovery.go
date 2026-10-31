@@ -30,16 +30,23 @@ type Device struct {
 	LastSeen time.Time `json:"lastSeen"`
 }
 
-// Model codes announced in DevModel.bambu.com.
+// Model codes announced in DevModel.bambu.com, the model_id of the machine
+// profiles in Bambu Studio (resources/profiles/BBL/machine).
 var models = map[string]string{
 	"N2S":     "A1",
 	"N1":      "A1 mini",
+	"N9":      "A2L",
 	"C11":     "P1P",
 	"C12":     "P1S",
+	"N7":      "P2S",
 	"BL-P001": "X1C",
 	"BL-P002": "X1",
 	"C13":     "X1E",
+	"N6":      "X2D",
 	"O1D":     "H2D",
+	"O1E":     "H2D Pro",
+	"O1S":     "H2S",
+	"O1C2":    "H2C",
 }
 
 // ModelName returns the product name for a model code.
