@@ -14,6 +14,7 @@ const pl: Messages = {
     password: 'Hasło',
     submit: 'Zaloguj',
     failed: 'Nieprawidłowe hasło',
+    tooMany: 'Zbyt wiele nieudanych prób. Spróbuj ponownie za chwilę.',
   },
   dashboard: {
     empty: 'Brak skonfigurowanych drukarek',

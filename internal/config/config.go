@@ -31,9 +31,12 @@ type Printer struct {
 
 // Config is the whole content of config.json.
 type Config struct {
-	PasswordHash  string    `json:"password_hash,omitempty"`
-	SessionSecret string    `json:"session_secret,omitempty"` // signs login cookies; replaced with the password
-	Printers      []Printer `json:"printers"`
+	PasswordHash  string `json:"password_hash,omitempty"`
+	SessionSecret string `json:"session_secret,omitempty"` // signs login cookies; replaced with the password
+	// RevokedSessions lists the sessions logged out before they expired:
+	// a hash of the cookie and its expiry unix time.
+	RevokedSessions map[string]int64 `json:"revoked_sessions,omitempty"`
+	Printers        []Printer        `json:"printers"`
 }
 
 // DefaultDataDir returns the OS specific default data directory.

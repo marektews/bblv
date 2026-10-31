@@ -18,7 +18,9 @@ async function submit() {
     await start()
   } catch (err) {
     // Only a refusal means a wrong password; the server may be unreachable.
-    if (err instanceof ApiError && err.status === 401) {
+    if (err instanceof ApiError && err.status === 429) {
+      error.value = t('login.tooMany')
+    } else if (err instanceof ApiError && err.status === 401) {
       error.value = t('login.failed')
     } else if (err instanceof ApiError) {
       error.value = err.message

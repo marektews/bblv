@@ -1,6 +1,7 @@
 package config
 
 import (
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -63,6 +64,7 @@ func (s *Store) Update(fn func(c *Config) error) error {
 
 func (c Config) clone() Config {
 	c.Printers = slices.Clone(c.Printers)
+	c.RevokedSessions = maps.Clone(c.RevokedSessions)
 	return c
 }
 

@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"maps"
 	"net/http"
 	"strconv"
 	"strings"
@@ -29,12 +30,14 @@ var ErrWrongPassword = errors.New("wrong password")
 
 // Auth checks and changes the password kept in the configuration.
 type Auth struct {
-	store *config.Store
+	store    *config.Store
+	throttle throttle
+	clock    func() time.Time // of the throttle; replaced in tests
 }
 
 // New returns an Auth backed by the configuration store.
 func New(store *config.Store) *Auth {
-	return &Auth{store: store}
+	return &Auth{store: store, clock: time.Now}
 }
 
 // Required reports whether a password is set.
@@ -49,16 +52,26 @@ func (a *Auth) Valid(r *http.Request) bool {
 		return true
 	}
 	cookie, err := r.Cookie(cookieName)
-	return err == nil && verify(c.SessionSecret, cookie.Value, time.Now())
+	if err != nil || !verify(c.SessionSecret, cookie.Value, time.Now()) {
+		return false
+	}
+	_, revoked := c.RevokedSessions[sessionID(cookie.Value)]
+	return !revoked
 }
 
-// Login checks the password and on success starts a session.
+// Login checks the password and on success starts a session. After failed
+// attempts, further ones are refused with a *WaitError for a while.
 func (a *Auth) Login(w http.ResponseWriter, r *http.Request, password string) (bool, error) {
 	c := a.store.Get()
 	if c.PasswordHash == "" {
 		return true, nil
 	}
-	if bcrypt.CompareHashAndPassword([]byte(c.PasswordHash), []byte(password)) != nil {
+	if wait := a.throttle.begin(a.clock()); wait != nil {
+		return false, wait
+	}
+	ok := bcrypt.CompareHashAndPassword([]byte(c.PasswordHash), []byte(password)) == nil
+	a.throttle.end(ok, a.clock())
+	if !ok {
 		return false, nil
 	}
 	secret := c.SessionSecret
@@ -76,9 +89,37 @@ func (a *Auth) Login(w http.ResponseWriter, r *http.Request, password string) (b
 	return true, nil
 }
 
-// Logout ends the session of the caller.
-func (a *Auth) Logout(w http.ResponseWriter) {
+// Logout ends the session of the caller, also for copies of its cookie: the
+// session is revoked until it would have expired.
+func (a *Auth) Logout(w http.ResponseWriter, r *http.Request) error {
+	clearCookie(w)
+	cookie, err := r.Cookie(cookieName)
+	c := a.store.Get()
+	now := time.Now()
+	if err != nil || c.PasswordHash == "" || !verify(c.SessionSecret, cookie.Value, now) {
+		return nil
+	}
+	expires, _ := expiry(cookie.Value)
+	return a.store.Update(func(cfg *config.Config) error {
+		// Expired sessions are refused anyway.
+		maps.DeleteFunc(cfg.RevokedSessions, func(_ string, exp int64) bool { return exp < now.Unix() })
+		if cfg.RevokedSessions == nil {
+			cfg.RevokedSessions = map[string]int64{}
+		}
+		cfg.RevokedSessions[sessionID(cookie.Value)] = expires
+		return nil
+	})
+}
+
+func clearCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{Name: cookieName, Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode})
+}
+
+// sessionID identifies a session in the list of revoked ones without
+// keeping its cookie, which would be valid again with the old secret.
+func sessionID(cookie string) string {
+	sum := sha256.Sum256([]byte(cookie))
+	return hex.EncodeToString(sum[:16])
 }
 
 // SetPassword replaces the password after checking the current one; an empty
@@ -99,7 +140,8 @@ func (a *Auth) SetPassword(w http.ResponseWriter, r *http.Request, current, pass
 		if hash != nil {
 			secret = newSecret()
 		}
-		c.PasswordHash, c.SessionSecret = string(hash), secret
+		// A new secret ends every session, the revoked ones included.
+		c.PasswordHash, c.SessionSecret, c.RevokedSessions = string(hash), secret, nil
 		return nil
 	})
 	if err != nil {
@@ -108,7 +150,7 @@ func (a *Auth) SetPassword(w http.ResponseWriter, r *http.Request, current, pass
 	if secret != "" {
 		setCookie(w, r, secret)
 	} else {
-		a.Logout(w)
+		clearCookie(w)
 	}
 	return nil
 }
@@ -135,12 +177,18 @@ func token(secret string, expires time.Time) string {
 }
 
 func verify(secret, value string, now time.Time) bool {
-	exp, _, ok := strings.Cut(value, ".")
-	n, err := strconv.ParseInt(exp, 10, 64)
-	if secret == "" || !ok || err != nil || now.Unix() > n {
+	n, ok := expiry(value)
+	if secret == "" || !ok || now.Unix() > n {
 		return false
 	}
 	return hmac.Equal([]byte(token(secret, time.Unix(n, 0))), []byte(value))
+}
+
+// expiry returns the expiry unix time of a token.
+func expiry(value string) (int64, bool) {
+	exp, _, ok := strings.Cut(value, ".")
+	n, err := strconv.ParseInt(exp, 10, 64)
+	return n, ok && err == nil
 }
 
 func newSecret() string {

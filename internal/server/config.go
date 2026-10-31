@@ -5,12 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime"
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
-	"time"
 
 	"github.com/marektews/bblv/internal/auth"
 	"github.com/marektews/bblv/internal/bambustudio"
@@ -309,12 +310,16 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ok, err := s.auth.Login(w, r, in.Password)
+	if wait := (*auth.WaitError)(nil); errors.As(err, &wait) {
+		w.Header().Set("Retry-After", strconv.Itoa(wait.Seconds()))
+		writeError(w, http.StatusTooManyRequests, err.Error())
+		return
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if !ok {
-		time.Sleep(time.Second) // slows down guessing
 		writeError(w, http.StatusUnauthorized, auth.ErrWrongPassword.Error())
 		return
 	}
@@ -322,7 +327,11 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) logout(w http.ResponseWriter, r *http.Request) {
-	s.auth.Logout(w)
+	if err := s.auth.Logout(w, r); err != nil {
+		slog.Warn("session not revoked", "err", err)
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 

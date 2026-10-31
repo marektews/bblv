@@ -51,6 +51,7 @@ func TestPasswordLifecycle(t *testing.T) {
 	if ok, _ := a.Login(rec, anon, "wrong"); ok || len(rec.Result().Cookies()) != 0 {
 		t.Fatal("wrong password accepted")
 	}
+	a.clock = func() time.Time { return time.Now().Add(time.Minute) } // after the wait
 	rec = httptest.NewRecorder()
 	if ok, err := a.Login(rec, anon, "secret"); !ok || err != nil {
 		t.Fatalf("login failed: %v", err)

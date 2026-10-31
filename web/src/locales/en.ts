@@ -12,6 +12,7 @@ const en = {
     password: 'Password',
     submit: 'Log in',
     failed: 'Wrong password',
+    tooMany: 'Too many failed attempts. Try again in a moment.',
   },
   dashboard: {
     empty: 'No printers configured',
