@@ -111,6 +111,8 @@ const en = {
     linesMode: 'Simplified view (lines) for a large print',
     noWebGL: 'The 3D view needs WebGL, which this browser does not offer or has turned off (e.g. without hardware acceleration).',
     contextLost: 'The browser has suspended the 3D view. If it does not come back shortly, reload the page.',
+    unlock: 'Turn the model',
+    lock: 'Lock the model',
   },
   camera: {
     title: 'Camera',

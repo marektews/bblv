@@ -113,6 +113,8 @@ const pl: Messages = {
     linesMode: 'Uproszczony widok (linie) dla dużego wydruku',
     noWebGL: 'Widok 3D wymaga WebGL, którego ta przeglądarka nie obsługuje albo ma wyłączony (np. bez przyspieszania sprzętowego).',
     contextLost: 'Przeglądarka wstrzymała widok 3D. Jeśli za chwilę nie wróci, odśwież stronę.',
+    unlock: 'Obracaj model',
+    lock: 'Zablokuj model',
   },
   camera: {
     title: 'Kamera',

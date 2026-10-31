@@ -129,7 +129,7 @@ const slots = computed<Slot[]>(() => {
 
 <template>
   <div class="status-panel">
-    <section v-if="active">
+    <section v-if="active" class="progress">
       <h4><fa-icon icon="bars-progress" class="ic" />{{ t('status.progress') }}</h4>
       <el-progress :percentage="s.percent" :stroke-width="10" />
       <el-descriptions :column="1" size="small" border>

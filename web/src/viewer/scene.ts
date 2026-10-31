@@ -300,6 +300,13 @@ export class PrintScene {
     this.render()
   }
 
+  // setInteractive lets the mouse or touch turn and zoom the view. When it
+  // is off, a finger moving over the view scrolls the page.
+  setInteractive(on: boolean) {
+    this.controls.enabled = on
+    this.renderer.domElement.style.touchAction = on ? 'none' : 'auto'
+  }
+
   dispose() {
     cancelAnimationFrame(this.frame)
     this.resizeObserver.disconnect()

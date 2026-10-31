@@ -24,6 +24,11 @@ const lines = ref(false)
 const noWebGL = ref(false)
 const contextLost = ref(false)
 
+// On a touch screen the view ignores fingers until unlocked, so that
+// swiping over it scrolls the page instead of turning the model.
+const touch = window.matchMedia('(pointer: coarse)').matches
+const interactive = ref(!touch)
+
 const colorMode = ref<ColorMode>('filament')
 const manual = ref(false)
 const manualLayer = ref(0)
@@ -155,6 +160,7 @@ onMounted(() => {
     return
   }
   scene.onContextChange = (lost) => (contextLost.value = lost)
+  scene.setInteractive(interactive.value)
   scene.setBed(...bedSize(props.printer.model))
   scene.setColorMode(colorMode.value)
   load()
@@ -171,6 +177,7 @@ onBeforeUnmount(() => {
 watch(() => (props.printer.geometry.state === 'ready' ? (props.printer.geometry.key ?? '') : ''), load)
 watch(sceneLayer, (v) => scene?.setLayer(v))
 watch(colorMode, (m) => scene?.setColorMode(m))
+watch(interactive, (on) => scene?.setInteractive(on))
 </script>
 
 <template>
@@ -179,6 +186,9 @@ watch(colorMode, (m) => scene?.setColorMode(m))
       <div v-if="noWebGL" class="overlay">{{ t('viewer.noWebGL') }}</div>
       <div v-else-if="contextLost" class="overlay">{{ t('viewer.contextLost') }}</div>
       <div v-else-if="loadError" class="overlay">{{ t('viewer.loadFailed', { msg: loadError }) }}</div>
+      <el-button v-if="touch && !noWebGL" class="lock" size="small" :type="interactive ? 'primary' : 'default'" @click="interactive = !interactive">
+        <fa-icon :icon="interactive ? 'lock' : 'lock-open'" class="ic" />{{ interactive ? t('viewer.lock') : t('viewer.unlock') }}
+      </el-button>
     </div>
     <div v-if="geometry" class="toolbar">
       <div class="layer">
@@ -226,11 +236,18 @@ watch(colorMode, (m) => scene?.setColorMode(m))
   border-radius: 8px;
   background: var(--el-fill-color-light);
   overflow: hidden;
-  touch-action: none;
 }
 
+/* The scene sets touch-action on the canvas: none while it can be turned. */
 .canvas :deep(canvas) {
   display: block;
+}
+
+.lock {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
 }
 
 .overlay {

@@ -4,6 +4,9 @@ import { getAuth, setUnauthorizedHandler, type PrinterInfo } from './api'
 // Printers in configuration order, kept up to date by the server's event stream.
 export const printers = ref<PrinterInfo[]>([])
 export const connected = ref(false)
+// loaded is set once the server has sent every printer, so that an empty
+// list means no printers rather than not yet known.
+export const loaded = ref(false)
 
 const GROUP_KEY = 'groupByState'
 function initialGrouping(): boolean {
@@ -55,6 +58,7 @@ export function showLogin() {
   events = null
   connected.value = false
   printers.value = []
+  loaded.value = false
   auth.state = 'login'
 }
 
@@ -103,5 +107,6 @@ function connectEvents() {
     const ids = JSON.parse((e as MessageEvent<string>).data) as string[]
     const byId = new Map(printers.value.map((p) => [p.id, p]))
     printers.value = ids.flatMap((id) => byId.get(id) ?? [])
+    loaded.value = true
   })
 }

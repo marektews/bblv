@@ -6,7 +6,7 @@ import GeometryNotice from '../components/GeometryNotice.vue'
 import StateTag from '../components/StateTag.vue'
 import StatusPanel from '../components/StatusPanel.vue'
 import { reloadForUpdate } from '../reload'
-import { connected, printers } from '../store'
+import { loaded, printers } from '../store'
 
 // Shown when the 3D view cannot be loaded and reloading did not help.
 const ViewerFailed = defineComponent({
@@ -57,7 +57,8 @@ const printer = computed(() => printers.value.find((p) => p.id === props.id))
       </aside>
     </div>
   </div>
-  <el-empty v-else-if="connected" :description="t('printer.notFound')" />
+  <el-empty v-else-if="loaded" :description="t('printer.notFound')" />
+  <div v-else v-loading="true" class="loading" />
 </template>
 
 <style scoped>
@@ -106,9 +107,39 @@ const printer = computed(() => printers.value.find((p) => p.id === props.id))
   text-align: center;
 }
 
+.loading {
+  height: 200px;
+}
+
+/* On a narrow screen the columns dissolve into one list: the progress and
+   the camera first, then the 3D view and the rest of the status. */
 @media (max-width: 900px) {
   .layout {
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch; /* the 3D view has no width of its own */
+  }
+
+  .main,
+  .side,
+  .side :deep(.status-panel) {
+    display: contents;
+  }
+
+  .side :deep(.status-panel > section) {
+    order: 4;
+  }
+
+  .side :deep(.status-panel > section.progress) {
+    order: 1;
+  }
+
+  .side :deep(.camera) {
+    order: 2;
+  }
+
+  .main > :deep(*) {
+    order: 3;
   }
 }
 </style>

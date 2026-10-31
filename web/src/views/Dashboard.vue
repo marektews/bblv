@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import type { PrinterInfo } from '../api'
 import PrinterTile from '../components/PrinterTile.vue'
 import { STATE_ICONS, STATE_ORDER, STATE_TYPES, stateKey } from '../format'
-import { connected, groupByState, printers } from '../store'
+import { groupByState, loaded, printers } from '../store'
 
 const { t, locale } = useI18n()
 
@@ -33,7 +33,8 @@ const groups = computed(() => {
 </script>
 
 <template>
-  <el-empty v-if="connected && printers.length === 0" :description="t('dashboard.empty')" />
+  <div v-if="!loaded" v-loading="true" class="loading" />
+  <el-empty v-else-if="printers.length === 0" :description="t('dashboard.empty')" />
   <section v-for="g in groups" :key="g.key" class="group">
     <h2 v-if="groupByState" :class="['group-title', `is-${STATE_TYPES[g.key] ?? 'info'}`]">
       <fa-icon :icon="STATE_ICONS[g.key]" class="ic" />{{ t(`state.${g.key}`) }}
@@ -46,6 +47,10 @@ const groups = computed(() => {
 </template>
 
 <style scoped>
+.loading {
+  height: 200px;
+}
+
 .group + .group {
   margin-top: 24px;
 }
