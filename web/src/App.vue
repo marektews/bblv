@@ -7,7 +7,7 @@ import { useRoute } from 'vue-router'
 import { logout } from './api'
 import { setLocale, type Locale } from './i18n'
 import { reloadForUpdate } from './reload'
-import { auth, connected, groupByState, newVersion, showLogin } from './store'
+import { auth, connected, groupByState, loaded, newVersion, showLogin } from './store'
 import Login from './views/Login.vue'
 
 const { t, locale } = useI18n()
@@ -61,7 +61,9 @@ async function signOut() {
         </template>
       </el-alert>
       <Login v-if="auth.state === 'login'" />
-      <router-view v-else-if="auth.state === 'ok'" />
+      <div v-else-if="auth.state === 'ok'" :class="{ stale: loaded && !connected }">
+        <router-view />
+      </div>
     </main>
   </el-config-provider>
 </template>

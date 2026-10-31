@@ -21,6 +21,7 @@ const en = {
     experimental: 'Experimental',
     experimentalHint: 'Support for this model is based on community documentation and has not been tested.',
     notFound: 'Unknown printer',
+    offline: 'The printer is offline. The status below is from its last report and may be outdated.',
   },
   state: {
     IDLE: 'Idle',

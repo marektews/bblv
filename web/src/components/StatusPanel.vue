@@ -21,8 +21,9 @@ const stage = computed(() => stageName(s.value.stage, locale.value))
 // The printer reports the signal as e.g. "-42dBm".
 const wifi = computed(() => s.value.wifiSignal.replace(/(\d)\s*dBm$/i, '$1 dBm') || '—')
 
-// The printer reports the card size in KB, and only with an RTSP camera.
-const gb = (kb: number) => `${(kb / 1024 / 1024).toLocaleString(locale.value, { maximumFractionDigits: 1 })} GB`
+// The printer reports the card size in KiB, and only with an RTSP camera;
+// cards are sold in decimal gigabytes, e.g. 128 GB = 124984320 KiB.
+const gb = (kb: number) => `${((kb * 1024) / 1e9).toLocaleString(locale.value, { maximumFractionDigits: 1 })} GB`
 const sdCard = computed(() => {
   if (!props.printer.online) {
     return '—'

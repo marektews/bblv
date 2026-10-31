@@ -14,7 +14,8 @@ export function useFormat() {
     finishAt(min: number): string {
       const end = new Date(Date.now() + min * 60_000)
       const today = end.toDateString() === new Date().toDateString()
-      const opts: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit' }
+      // 24-hour clock also in English, like the printer screen.
+      const opts: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }
       if (!today) {
         opts.weekday = 'short'
       }

@@ -23,6 +23,7 @@ const pl: Messages = {
     experimental: 'Eksperymentalne',
     experimentalHint: 'Obsługa tego modelu opiera się na dokumentacji społeczności i nie była testowana.',
     notFound: 'Nieznana drukarka',
+    offline: 'Drukarka jest offline. Poniższy stan pochodzi z ostatniego raportu i może być nieaktualny.',
   },
   state: {
     IDLE: 'Bezczynna',

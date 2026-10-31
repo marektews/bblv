@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { login } from '../api'
+import { ApiError, login } from '../api'
 import { start } from '../store'
 
 const { t } = useI18n()
@@ -16,8 +16,15 @@ async function submit() {
     await login(password.value)
     password.value = ''
     await start()
-  } catch {
-    error.value = t('login.failed')
+  } catch (err) {
+    // Only a refusal means a wrong password; the server may be unreachable.
+    if (err instanceof ApiError && err.status === 401) {
+      error.value = t('login.failed')
+    } else if (err instanceof ApiError) {
+      error.value = err.message
+    } else {
+      error.value = t('app.disconnected')
+    }
   } finally {
     busy.value = false
   }

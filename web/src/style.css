@@ -9,10 +9,29 @@ body {
   user-select: none;
 }
 
+/* Values worth copying: HMS codes and alert texts, the details of a
+   printer, its address and serial number in the settings. */
 input,
-textarea {
+textarea,
+.el-descriptions__content,
+.el-alert__title,
+.el-alert__description,
+.el-table .cell,
+.selectable {
   -webkit-user-select: text;
   user-select: text;
+}
+
+/* Element Plus' secondary text (#909399) has a contrast of 3:1 on white,
+   too little for the small labels it is used for. */
+html:not(.dark) {
+  --el-text-color-secondary: #6b6e73;
+}
+
+/* While the server is unreachable the data shown may be outdated. */
+.stale {
+  opacity: 0.55;
+  transition: opacity 0.3s;
 }
 
 a {

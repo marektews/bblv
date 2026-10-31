@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { thumbnailUrl, type PrinterInfo } from '../api'
 import { ACTIVE_STATES, useFormat } from '../format'
@@ -25,13 +25,17 @@ const alertLevel = computed(() => {
   return levels.every((l) => l === 4) ? 'info' : 'warning'
 })
 const alertIcons = { error: 'circle-exclamation', warning: 'triangle-exclamation', info: 'circle-info' } as const
+
+// A thumbnail that fails to load, e.g. evicted from the cache, leaves the
+// placeholder instead of a broken image; the next print brings another URL.
+const failedThumbnail = ref('')
 </script>
 
 <template>
   <router-link :to="`/printer/${encodeURIComponent(printer.id)}`" class="tile-link">
     <el-card shadow="hover" class="tile" body-class="tile-body">
       <div class="thumb">
-        <img v-if="printer.geometry.thumbnail" :src="thumbnailUrl(printer)" alt="" />
+        <img v-if="printer.geometry.thumbnail && failedThumbnail !== thumbnailUrl(printer)" :src="thumbnailUrl(printer)" alt="" @error="failedThumbnail = thumbnailUrl(printer)" />
       </div>
       <div class="info">
         <div class="title">

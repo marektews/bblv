@@ -46,7 +46,8 @@ const printer = computed(() => printers.value.find((p) => p.id === props.id))
         <el-tag type="warning" size="small"><fa-icon icon="flask" class="ic" />{{ t('printer.experimental') }}</el-tag>
       </el-tooltip>
     </div>
-    <div class="layout">
+    <el-alert v-if="!printer.online" type="warning" :closable="false" show-icon class="offline-note" :title="t('printer.offline')" />
+    <div class="layout" :class="{ offline: !printer.online }">
       <section class="main">
         <GeometryNotice :printer="printer" />
         <PrintViewer :key="printer.id" :printer="printer" />
@@ -97,6 +98,16 @@ const printer = computed(() => printers.value.find((p) => p.id === props.id))
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.offline-note {
+  margin-bottom: 12px;
+}
+
+/* The last report of an offline printer: AMS, alerts and the device are
+   no longer current. Sections, as on a phone their panel has no box. */
+.offline :deep(.status-panel > section) {
+  opacity: 0.55;
 }
 
 .viewer-failed {
