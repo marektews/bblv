@@ -98,9 +98,14 @@ the printers, which also ends ffmpeg processes of the cameras.
 
 On Linux, `-user bblv` (with `install`) runs the service as that account
 instead of root and makes it the owner of the data directory; create the
-account first, e.g. `useradd --system bblv`. The RTSP cameras get the access
-code on the ffmpeg command line, which then only root and that account can
-see. A Windows service runs as LocalSystem.
+account first, e.g. `useradd --system bblv`. A Windows service runs as
+LocalSystem.
+
+The RTSP cameras (X1, X2, H2, P2) get the access code on the ffmpeg command
+line. On Linux every local user can read command lines unless `/proc` is
+mounted with `hidepid=2`; on Windows users without administrator rights
+cannot read those of a service. ffmpeg does not check the printer's
+certificate either.
 
 ## Configuration
 
