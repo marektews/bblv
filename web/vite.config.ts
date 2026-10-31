@@ -20,7 +20,24 @@ export default defineConfig({
   build: {
     outDir,
     emptyOutDir: true,
-    chunkSizeWarningLimit: 1500,
+    rolldownOptions: {
+      output: {
+        // The libraries change seldom, the application with every update;
+        // kept apart, a page reloading after an update fetches only the
+        // application again. Three.js stays in the 3D view, loaded when a
+        // printer is opened.
+        codeSplitting: {
+          groups: [
+            {
+              name: 'vendor',
+              test: (id: string) => /[\\/]node_modules[\\/]/.test(id) && !/[\\/]node_modules[\\/]three[\\/]/.test(id),
+            },
+          ],
+        },
+      },
+    },
+    // Just above the largest chunk, Element Plus in vendor, so that growth shows.
+    chunkSizeWarningLimit: 1300,
   },
   server: {
     proxy: { '/api': 'http://localhost:8080' },

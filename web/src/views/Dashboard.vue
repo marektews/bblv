@@ -8,10 +8,13 @@ import { groupByState, loaded, printers } from '../store'
 
 const { t, locale } = useI18n()
 
+// Made again only when the language changes, not with every status update.
+const collatorOf = computed(() => new Intl.Collator(locale.value, { numeric: true, sensitivity: 'base' }))
+
 // Printers sorted by name and, when groupByState is on, grouped by state in
 // STATE_ORDER; otherwise a single group.
 const groups = computed(() => {
-  const collator = new Intl.Collator(locale.value, { numeric: true, sensitivity: 'base' })
+  const collator = collatorOf.value
   if (!groupByState.value) {
     return [{ key: 'all', printers: [...printers.value].sort((a, b) => collator.compare(a.name, b.name)) }]
   }

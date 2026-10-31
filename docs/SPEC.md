@@ -152,6 +152,9 @@ bblv.log        log usługi Windows, do 5 MB + bblv.log.1
 - Vue 3 + Element Plus + TypeScript + Vite (projekt w `web/`, build do `internal/webui/dist/`).
   - TypeScript 6.x — TS 7 (natywny, w Go) nie ma API JS, którego wymaga `vue-tsc`.
   - Element Plus importowany w całości (~350 KB JS po gzip); serwer wysyła pliki tekstowe skompresowane gzip.
+  - Biblioteki w osobnym chunku `vendor` (~380 KB gzip), aplikacja w `index` (~21 KB gzip), Three.js w leniwie ładowanym `PrintViewer`; po aktualizacji przeglądarka pobiera ponownie zwykle tylko aplikację. `chunkSizeWarningLimit` tuż nad największym chunkiem, żeby wzrost był widoczny.
+  - Widok 3D: przejście nieprzezroczyste rysuje tylko odcinki warstw do bieżącej (`instanceCount`), przezroczyste „duchy” — wszystkie, odrzucając wydrukowane w shaderze.
+  - Karta przeglądarki: postęp w tytule („42% · A1”), ikona SVG (kostka Font Awesome).
   - Paczki npm instalowane z `--before` (wersje co najmniej 2 tygodnie po publikacji).
   - Ikony: Font Awesome Free Solid (`@fortawesome/vue-fontawesome`), wbudowane w bundle (działa offline); w paczce tylko ikony zarejestrowane w `web/src/icons.ts`, w szablonach `<fa-icon icon="…" class="ic" />`.
 - i18n PL/EN (`vue-i18n` + lokalizacje Element Plus), język wg przeglądarki + przełącznik.

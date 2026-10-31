@@ -173,6 +173,8 @@ export class PrintScene {
   private meshes: THREE.Object3D[] = []
   private materials: THREE.ShaderMaterial[] = []
   private geometry: THREE.InstancedBufferGeometry | null = null
+  private printed: THREE.InstancedBufferGeometry | null = null // the opaque pass, sharing the buffers
+  private layerEnds: number[] = [] // index after the last point of each layer
   private uniforms = {
     uLayer: { value: 0 },
     uMode: { value: 0 },
@@ -264,6 +266,16 @@ export class PrintScene {
     geometry.setAttribute('iProps', new THREE.InterleavedBufferAttribute(buffer, 4, POINT_FLOATS + 3))
     geometry.instanceCount = count
     this.geometry = geometry
+    // The printed layers come first, so the opaque pass draws only as many
+    // segments as are printed; it shares the buffers of the ghost's.
+    const printed = new THREE.InstancedBufferGeometry()
+    printed.index = geometry.index
+    for (const [name, attribute] of Object.entries(geometry.attributes)) {
+      printed.setAttribute(name, attribute)
+    }
+    this.printed = printed
+    this.layerEnds = g.meta.layers.map((l) => l.first + l.count)
+    this.countPrinted()
 
     g.meta.filaments.slice(0, MAX_TOOLS).forEach((c, i) => this.uniforms.uTools.value[i].setStyle(c))
     g.meta.features.slice(0, MAX_FEATURES).forEach((name, i) => this.uniforms.uFeatures.value[i].setStyle(featureColor(name)))
@@ -277,7 +289,8 @@ export class PrintScene {
         transparent: ghost,
         depthWrite: !ghost,
       })
-      const mesh = this.lines ? new THREE.LineSegments(geometry, material) : new THREE.Mesh(geometry, material)
+      const passGeometry = ghost ? geometry : printed
+      const mesh = this.lines ? new THREE.LineSegments(passGeometry, material) : new THREE.Mesh(passGeometry, material)
       mesh.frustumCulled = false // the instances are far outside the unit base geometry
       mesh.renderOrder = ghost ? 1 : 0
       this.materials.push(material)
@@ -292,7 +305,20 @@ export class PrintScene {
   // -1 shows only the ghost and an index past the last layer shows everything printed.
   setLayer(index: number) {
     this.uniforms.uLayer.value = index
+    this.countPrinted()
     this.render()
+  }
+
+  // countPrinted limits the opaque pass to the segments of the layers up to
+  // the current one. Segment i ends at point i+1, whose layer it has.
+  private countPrinted() {
+    if (!this.printed || !this.geometry) {
+      return
+    }
+    const index = Math.round(this.uniforms.uLayer.value)
+    const ends = this.layerEnds
+    const end = index < 0 || ends.length === 0 ? 0 : ends[Math.min(index, ends.length - 1)]
+    this.printed.instanceCount = Math.max(0, Math.min(end - 1, this.geometry.instanceCount))
   }
 
   setColorMode(mode: ColorMode) {
@@ -332,10 +358,13 @@ export class PrintScene {
   private clearGeometry() {
     for (const m of this.meshes) this.root.remove(m)
     for (const m of this.materials) m.dispose()
+    this.printed?.dispose()
     this.geometry?.dispose()
     this.meshes = []
     this.materials = []
     this.geometry = null
+    this.printed = null
+    this.layerEnds = []
   }
 
   // fit points the camera at bounds given in G-code coordinates.
