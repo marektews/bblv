@@ -182,6 +182,7 @@ const en = {
     removePassword: 'Remove password',
     passwordSaved: 'Password saved',
     passwordRemoved: 'Password removed',
+    version: 'Bambu Live View {version}',
   },
   format: {
     minutes: '{m} min',

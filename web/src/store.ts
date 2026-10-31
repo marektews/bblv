@@ -33,7 +33,8 @@ export const auth = reactive({
 
 // newVersion is set when the server was updated after the page was loaded.
 export const newVersion = ref(false)
-let serverVersion = ''
+// serverVersion is the version of the server the page is connected to.
+export const serverVersion = ref('')
 
 let events: EventSource | null = null
 
@@ -75,10 +76,10 @@ function connectEvents() {
   // Sent first on every connect; a restart after an update brings another one.
   es.addEventListener('version', (e) => {
     const version = JSON.parse((e as MessageEvent<string>).data) as string
-    if (serverVersion && version !== serverVersion) {
+    if (serverVersion.value && version !== serverVersion.value) {
       newVersion.value = true
     }
-    serverVersion = version
+    serverVersion.value = version
   })
   es.addEventListener('error', () => {
     connected.value = false

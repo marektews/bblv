@@ -16,7 +16,7 @@ import {
   type PrinterInput,
 } from '../api'
 import PrinterDialog from '../components/PrinterDialog.vue'
-import { auth, printers } from '../store'
+import { auth, printers, serverVersion } from '../store'
 
 const { t, locale } = useI18n()
 // Live state from the event stream; a printer is missing until the server reports it.
@@ -299,10 +299,19 @@ async function changePassword(unset = false) {
     </section>
 
     <PrinterDialog :initial="dialog" :editing="!!editingId" :saving="saving" @save="save" @close="dialog = null" />
+
+    <p v-if="serverVersion" class="version">{{ t('settings.version', { version: serverVersion }) }}</p>
   </div>
 </template>
 
 <style scoped>
+.version {
+  margin: 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  user-select: text;
+}
+
 .settings {
   max-width: 1100px;
   margin: 0 auto;

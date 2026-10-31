@@ -184,6 +184,7 @@ const pl: Messages = {
     removePassword: 'Usuń hasło',
     passwordSaved: 'Hasło zapisane',
     passwordRemoved: 'Hasło usunięte',
+    version: 'Bambu Live View {version}',
   },
   format: {
     minutes: '{m} min',
