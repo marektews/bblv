@@ -83,12 +83,13 @@ Stan (przygotowanie/druk/pauza/koniec/błąd), %, warstwa X/Y, pozostały czas +
 
 **Etapy (`stg_cur`):** nazwy PL/EN dla 78 numerów wg listy ha-bambulab (`web/src/locales/stages.ts`); 0 = drukowanie i -1/255 = bezczynna nie są pokazywane. Etap widoczny w panelu i na kafelku w trakcie wydruku.
 
-## 5. Serwer HTTP / API (szkic)
+## 5. Serwer HTTP / API
 
 | Metoda | Ścieżka | Opis |
 |---|---|---|
-| GET | `/api/printers` | lista drukarek + skrócony stan |
-| GET | `/api/printers/{id}/state` | pełny stan |
+| GET | `/api/printers` | wszystkie drukarki, pełny opis jak w zdarzeniu `printer` |
+| GET | `/api/printers/{id}` | jedna drukarka |
+| GET | `/api/printers/{id}/alerts?lang=pl\|en` | alerty HMS i błąd wydruku z opisami i linkami do wiki |
 | GET | `/api/events` | SSE: po połączeniu `version` (wersja serwera; inna niż przy poprzednim połączeniu = strona się przeładowuje, w ustawieniach pokazuje pasek), potem zdarzenie `printer` z pełnym opisem drukarki (`id`, `name`, `model`, `experimental`, `online`, `status`, `geometry`) — po połączeniu dla każdej drukarki, potem przy każdej zmianie; nowy `geometry.key` = przeładuj geometrię; `ready` z listą id po drukarkach wysłanych przy połączeniu; `removed` z id usuniętej. Klient, który nie nadąża (64 zdarzenia), jest rozłączany i łączy się ponownie |
 | GET | `/api/printers/{id}/geometry` | geometria binarna (z cache), gzip, `ETag` = `geometry.key` |
 | GET | `/api/printers/{id}/thumbnail` | miniatura z `.3mf` |
@@ -96,11 +97,11 @@ Stan (przygotowanie/druk/pauza/koniec/błąd), %, warstwa X/Y, pozostały czas +
 | POST | `/api/printers/{id}/upload` | ręczny upload G-code / 3MF |
 | GET | `/api/auth` | `{required, authenticated}` |
 | GET | `/api/config` | drukarki (bez Access Code, tylko `hasAccessCode`), `passwordSet`, ścieżka `BambuStudio.conf` |
-| POST/PUT/DELETE | `/api/config/printers[/{id}]` | dodanie / zmiana (pusty kod = bez zmiany) / usunięcie; zmiany od razu w monitorze |
+| POST/PUT/DELETE | `/api/config/printers[/{id}]` | dodanie / zmiana (pusty kod = bez zmiany, adres: IP albo nazwa hosta) / usunięcie; monitor śledzi zapis (`Store.Watch`) |
 | GET | `/api/config/discovered` | drukarki wykryte przez SSDP + `configuredAs` |
 | POST | `/api/config/import-codes` | kody z `BambuStudio.conf` (wgrany plik albo lokalny) dla drukarek o pasującym numerze seryjnym |
 | PUT | `/api/config/password` | `{current, password}`; puste hasło = usunięcie |
-| POST | `/api/login`, `/api/logout` | sesja (gdy ustawione hasło) |
+| POST | `/api/login`, `/api/logout` | sesja (gdy ustawione hasło); 429 + `Retry-After` po błędnych próbach; wylogowanie unieważnia sesję |
 
 Stany `geometry.state`: `none`, `loading`, `ready`, `missing` (brak plików na karcie → upload), `error`. Przy `missing`/`error` w trakcie wydruku serwer ponawia pobranie co 30 s (max 10 razy) — drukarka może jeszcze pobierać plik.
 
