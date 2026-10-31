@@ -39,6 +39,8 @@ const printing = computed(() => ['PREPARE', 'RUNNING', 'PAUSE', 'FAILED'].includ
 // Slider value = 1-based number of the highlighted layer, 0 = nothing printed yet.
 const liveLayer = computed(() => (printing.value ? Math.min(props.printer.status.layer, total.value) : total.value))
 const shownLayer = computed(() => (manual.value ? manualLayer.value : liveLayer.value))
+// Height of the shown layer's top, in mm; undefined before the first layer.
+const shownZ = computed(() => geometry.value?.meta.layers[shownLayer.value - 1]?.z)
 // 0-based layer index for the scene; outside a print everything is shown printed, without a highlight.
 const sceneLayer = computed(() => (!manual.value && !printing.value ? total.value : shownLayer.value - 1))
 
@@ -192,7 +194,10 @@ watch(interactive, (on) => scene?.setInteractive(on))
     </div>
     <div v-if="geometry" class="toolbar">
       <div class="layer">
-        <span class="layer-label"><fa-icon icon="layer-group" class="ic" />{{ t('status.layer') }} {{ shownLayer }} / {{ total }}</span>
+        <span class="layer-label">
+          <fa-icon icon="layer-group" class="ic" />{{ t('status.layer') }} {{ shownLayer }} / {{ total }}
+          <span v-if="shownZ !== undefined" class="z"> · Z {{ amount(shownZ, 'mm', 2) }}</span>
+        </span>
         <el-slider :model-value="shownLayer" :min="0" :max="total" :show-tooltip="false" @input="onSlider" />
         <el-button v-if="manual" size="small" type="primary" @click="goLive">
           <fa-icon icon="tower-broadcast" class="ic" />{{ t('viewer.live') }}
@@ -281,6 +286,12 @@ watch(interactive, (on) => scene?.setInteractive(on))
   flex: none;
   min-width: 110px;
   font-size: 13px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums; /* the slider does not jump as digits change */
+}
+
+.layer-label .z {
+  color: var(--el-text-color-secondary);
 }
 
 .options {

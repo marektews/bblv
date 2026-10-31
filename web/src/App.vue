@@ -7,7 +7,8 @@ import { useRoute } from 'vue-router'
 import { logout } from './api'
 import { setLocale, type Locale } from './i18n'
 import { reloadForUpdate } from './reload'
-import { auth, connected, groupByState, loaded, newVersion, showLogin } from './store'
+import { auth, connected, groupByState, loaded, newVersion, printers, showLogin } from './store'
+import { pageTitle } from './title'
 import Login from './views/Login.vue'
 
 const { t, locale } = useI18n()
@@ -25,6 +26,11 @@ watchEffect(() => {
 function reload() {
   window.location.reload()
 }
+
+watchEffect(() => {
+  const id = route.path.startsWith('/printer/') ? String(route.params.id) : undefined
+  document.title = pageTitle(printers.value, id)
+})
 
 async function signOut() {
   await logout().catch(() => {})

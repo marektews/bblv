@@ -8,7 +8,7 @@ import StateTag from './StateTag.vue'
 
 const props = defineProps<{ printer: PrinterInfo }>()
 const { t, locale } = useI18n()
-const { duration } = useFormat()
+const { duration, finishAt } = useFormat()
 const status = computed(() => props.printer.status)
 const active = computed(() => props.printer.online && ACTIVE_STATES.includes(status.value.state))
 const stage = computed(() => (active.value ? stageName(status.value.stage, locale.value) : ''))
@@ -59,6 +59,7 @@ const failedThumbnail = ref('')
           <div class="meta stats">
             <span><fa-icon icon="layer-group" class="ic" />{{ t('status.layer') }} {{ status.layer }}/{{ status.totalLayers }}</span>
             <span><fa-icon icon="hourglass-half" class="ic" />{{ t('status.remaining') }} {{ duration(status.remainingMin) }}</span>
+            <span v-if="status.remainingMin > 0"><fa-icon icon="flag-checkered" class="ic" />{{ t('status.finishAt') }} {{ finishAt(status.remainingMin) }}</span>
           </div>
         </template>
       </div>
