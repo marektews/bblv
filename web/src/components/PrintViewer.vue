@@ -85,10 +85,12 @@ const legend = computed<LegendItem[]>(() => {
   })
 })
 
-// Build plate size in mm by model.
+// Build plate size in mm by model, the printable area of Bambu Studio's machine profiles.
 function bedSize(model: string): [number, number] {
   const m = model.toUpperCase()
   if (m.includes('MINI')) return [180, 180]
+  if (m === 'H2S') return [340, 320]
+  if (m === 'H2C' || m === 'A2L') return [330, 320]
   if (m.startsWith('H2')) return [350, 320]
   return [256, 256]
 }
@@ -97,6 +99,8 @@ async function load() {
   const g = props.printer.geometry
   if (g.state !== 'ready' || !g.key) {
     abort?.abort()
+    loading.value = false
+    loadError.value = ''
     geometry.value = null
     loadedKey = ''
     scene?.setGeometry(null)
@@ -151,7 +155,9 @@ onBeforeUnmount(() => {
   scene = null
 })
 
-watch(() => [props.printer.geometry.state, props.printer.geometry.key], load)
+// Every status update brings a new printer object, so the watched value is
+// a string: a new array would restart a download in progress each time.
+watch(() => (props.printer.geometry.state === 'ready' ? (props.printer.geometry.key ?? '') : ''), load)
 watch(sceneLayer, (v) => scene?.setLayer(v))
 watch(colorMode, (m) => scene?.setColorMode(m))
 </script>

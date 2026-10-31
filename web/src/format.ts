@@ -23,9 +23,9 @@ export function useFormat() {
     temp(current: number, target: number): string {
       return target > 0 ? `${Math.round(current)} / ${Math.round(target)} °C` : `${Math.round(current)} °C`
     },
-    // amount formats a quantity with at most one decimal, e.g. "235,3 g".
-    amount(value: number, unit: string): string {
-      return `${value.toLocaleString(locale.value, { maximumFractionDigits: 1 })} ${unit}`
+    // amount formats a quantity with at most one decimal by default, e.g. "235,3 g".
+    amount(value: number, unit: string, decimals = 1): string {
+      return `${value.toLocaleString(locale.value, { maximumFractionDigits: decimals })} ${unit}`
     },
   }
 }

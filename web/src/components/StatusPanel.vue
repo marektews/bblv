@@ -183,7 +183,7 @@ const slots = computed<Slot[]>(() => {
         </el-descriptions-item>
         <el-descriptions-item v-if="printer.geometry.settings?.layerHeight">
           <template #label><fa-icon icon="ruler-vertical" class="ic" />{{ t('status.layerHeight') }}</template>
-          {{ amount(printer.geometry.settings.layerHeight, 'mm') }}
+          {{ amount(printer.geometry.settings.layerHeight, 'mm', 3) }}
         </el-descriptions-item>
         <el-descriptions-item v-if="filamentProfiles.length">
           <template #label><fa-icon icon="palette" class="ic" />{{ t('status.filamentProfile') }}</template>
