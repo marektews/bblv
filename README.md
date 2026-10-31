@@ -46,8 +46,9 @@ If you own an experimental model, a recording of a print helps a lot — see
 
 ## Install
 
-Download the binary for your system from the releases page (once there are
-releases), or [build it](#building). Then run:
+Download the binary for your system from the [releases
+page](https://github.com/marektews/bblv/releases), where `SHA256SUMS` lists
+the checksums of the files, or [build it](#building). Then run:
 
 ```sh
 bblv serve
@@ -240,7 +241,8 @@ bblv replay -speed 0 recording.jsonl      # status log only
 
 ## Building
 
-Requirements: Go 1.24+, Node.js 20.19+ or 22.12+.
+Requirements: Go 1.27.3 (an older `go` command downloads it by itself),
+Node.js 22.12+.
 
 ```sh
 ./build.sh          # Linux, macOS, Git Bash
@@ -255,14 +257,27 @@ Both build the frontend (`web/`, Vue 3 + Element Plus + Three.js) into
 During development run `bblv serve` and, in `web/`, `npm run dev`; the Vite
 dev server proxies `/api` to `localhost:8080`.
 
-GitHub Actions runs these checks on every push and pull request, then the
-build, and keeps the binaries as an artifact of the run:
+GitHub Actions runs these checks on every push and pull request, the Go
+tests also on Windows, then the build, and keeps the binaries as an
+artifact of the run:
 
 ```sh
-go vet ./... && go test -race ./...
+gofmt -l . && go vet ./... && go test -race ./...
 go run ./tools/shadowcheck                       # names shadowing others in Go
+go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...   # known vulnerabilities
 cd web && npm run typecheck && npm run shadowcheck   # the same in TypeScript and Vue
+npm run i18ncheck                                # translation keys that do not exist
+npm test                                         # Vitest
 ```
+
+The frontend test of the geometry format decodes a file the Go encoder
+wrote (`web/src/viewer/testdata/`); after changing the format, rewrite it
+with `go test ./internal/gcode -run TestGeometryFixture -update`.
+
+Pushing a tag such as `v0.2.0` runs the same checks and publishes the
+binaries with `SHA256SUMS` as a release. Dependabot proposes updates of Go
+modules, npm packages and actions once a week, at least 14 days after
+their release.
 
 The HMS and error code descriptions are generated from the texts Bambu Lab
 publishes for Bambu Studio:
