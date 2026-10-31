@@ -5,10 +5,10 @@ import (
 	"errors"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"slices"
 	"sync"
 
+	"github.com/marektews/bblv/internal/atomicfile"
 	"github.com/marektews/bblv/internal/gcode"
 	"github.com/marektews/bblv/internal/printer"
 )
@@ -73,19 +73,7 @@ func (f *filamentNames) saveLocked() error {
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(f.path), filepath.Base(f.path)+".*.tmp")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err = tmp.Write(b); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err = tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), f.path)
+	return atomicfile.Write(f.path, b, 0o600)
 }
 
 // nameTrays returns copies of the AMS units and the external spool with the

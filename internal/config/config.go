@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+
+	"github.com/marektews/bblv/internal/atomicfile"
 )
 
 // ErrNotFound is returned for an unknown printer id.
@@ -80,7 +82,7 @@ func (c *Config) validate() error {
 	return nil
 }
 
-// Save writes config.json atomically (temp file + rename) with owner-only permissions.
+// Save writes config.json atomically and durably with owner-only permissions.
 func Save(dataDir string, c *Config) error {
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return err
@@ -89,22 +91,7 @@ func Save(dataDir string, c *Config) error {
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(dataDir, FileName+".*.tmp")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err = tmp.Write(b); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err = tmp.Close(); err != nil {
-		return err
-	}
-	if err = os.Chmod(tmp.Name(), 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), filepath.Join(dataDir, FileName))
+	return atomicfile.Write(filepath.Join(dataDir, FileName), b, 0o600)
 }
 
 // Printer returns the printer with the given id. An empty id selects the only

@@ -5,8 +5,9 @@ import (
 	"encoding/pem"
 	"errors"
 	"os"
-	"path/filepath"
 	"strings"
+
+	"github.com/marektews/bblv/internal/atomicfile"
 )
 
 // trust holds the CA certificates that sign the printers' certificates,
@@ -90,17 +91,5 @@ func (t *trust) save() error {
 	for _, c := range t.certs {
 		b = append(b, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: c.Raw})...)
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(t.path), filepath.Base(t.path)+".*.tmp")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err = tmp.Write(b); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err = tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), t.path)
+	return atomicfile.Write(t.path, b, 0o600)
 }
