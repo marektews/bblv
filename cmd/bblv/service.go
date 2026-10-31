@@ -28,7 +28,8 @@ Installing needs an administrator prompt on Windows and root on Linux.
 `
 
 func serviceConfig(o serveOptions) *service.Config {
-	args := []string{"serve", "-data", o.dataDir, "-listen", o.listen}
+	// -https= with the value attached also passes an empty one, which turns HTTPS off.
+	args := []string{"serve", "-data", o.dataDir, "-listen", o.listen, "-https=" + o.https}
 	if o.allowHosts != "" {
 		args = append(args, "-allow-host", o.allowHosts)
 	}
@@ -86,7 +87,11 @@ func runServiceCommand(args []string) error {
 			return fmt.Errorf("%w (administrator or root rights are needed)", err)
 		}
 		if action == "install" {
-			fmt.Printf("installed; data in %s, web UI on %s. Start it with: bblv service start\n", o.dataDir, o.listen)
+			ui := "http " + o.listen
+			if o.https != "" {
+				ui = "https " + o.https
+			}
+			fmt.Printf("installed; data in %s, web UI on %s. Start it with: bblv service start\n", o.dataDir, ui)
 		}
 		return nil
 	default:

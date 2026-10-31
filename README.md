@@ -54,17 +54,29 @@ the checksums of the files, or [build it](#building). Then run:
 bblv serve
 ```
 
-and open <http://localhost:8080> (or `http://<server-ip>:8080` from another
-device). Add your printers in **Settings**.
+and open <https://localhost:8443> (or `https://<server-ip>:8443` from another
+device; `http://…:8080` redirects there). Add your printers in **Settings**.
+
+bblv serves HTTPS with a self-signed certificate, which keeps the password
+and the session cookie off the network in clear text. Browsers warn about
+it, as nobody vouches for it: accept the warning once on every device (in
+Chrome *Advanced → Proceed*). The certificate, `https-cert.pem` and
+`https-key.pem` in the data directory, names `localhost`, the computer's
+name and its IPv4 addresses; it is renewed a month before it expires after
+about a year, or when the computer gets another address, and the warning
+comes again then. `-https=` turns HTTPS off and serves plain HTTP on
+`-listen`. On Windows, other devices reach the server only if the firewall
+lets them in on port 8443 (and 8080 for the redirect).
 
 | Flag | Default |
 |---|---|
 | `-data` | `%ProgramData%\bblv` on Windows, `/var/lib/bblv` on Linux |
-| `-listen` | `:8080` |
+| `-https` | `:8443`; empty: plain HTTP only |
+| `-listen` | `:8080`, redirecting to HTTPS |
 | `-allow-host` | none: comma-separated further host names, see below |
 
 The web interface opens under an IP address, `localhost`, a computer name
-without dots (`http://mypc:8080`) or a local name ending in `.local`,
+without dots (`https://mypc:8443`) or a local name ending in `.local`,
 `.lan`, `.home.arpa` or `.internal`. Other names are refused, which keeps
 pages of other sites from reaching bblv through DNS rebinding; name your
 own, e.g. that of a reverse proxy, with `-allow-host bblv.example.com`.
@@ -280,7 +292,7 @@ Both build the frontend (`web/`, Vue 3 + Element Plus + Three.js) into
 `dist/bblv-linux-arm64` (pure Go, `CGO_ENABLED=0`).
 
 During development run `bblv serve` and, in `web/`, `npm run dev`; the Vite
-dev server proxies `/api` to `localhost:8080`.
+dev server proxies `/api` to `https://localhost:8443`.
 
 GitHub Actions runs these checks on every push and pull request, the Go
 tests also on Windows, then the build, and keeps the binaries as an

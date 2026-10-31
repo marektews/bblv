@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"flag"
 	"log/slog"
@@ -25,12 +26,14 @@ import (
 	"github.com/marektews/bblv/internal/printjob"
 	"github.com/marektews/bblv/internal/relocate"
 	"github.com/marektews/bblv/internal/server"
+	"github.com/marektews/bblv/internal/tlscert"
 	"github.com/marektews/bblv/internal/trust"
 )
 
 type serveOptions struct {
 	dataDir     string
 	listen      string
+	https       string // "" serves plain HTTP on listen only
 	allowHosts  string // comma-separated
 	user        string // with service install: the account the service runs as
 	replay      string
@@ -42,7 +45,8 @@ func parseServeFlags(args []string) serveOptions {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	var o serveOptions
 	fs.StringVar(&o.dataDir, "data", config.DefaultDataDir(), "data directory")
-	fs.StringVar(&o.listen, "listen", ":8080", "HTTP listen address")
+	fs.StringVar(&o.listen, "listen", ":8080", "HTTP listen address; with -https it redirects there")
+	fs.StringVar(&o.https, "https", ":8443", "HTTPS listen address, with a self-signed certificate kept in the data directory; -https= serves plain HTTP on -listen only")
 	fs.StringVar(&o.user, "user", "", "with bblv service install on Linux: the account the service runs as instead of root; it becomes the owner of the data directory")
 	fs.StringVar(&o.allowHosts, "allow-host", "", "comma-separated host names, besides addresses and local names, under which the web interface may be opened, e.g. that of a reverse proxy")
 	fs.StringVar(&o.replay, "replay", "", "serve a virtual printer replaying this recording instead of the configured printers")
@@ -131,36 +135,74 @@ func serve(ctx context.Context, o serveOptions) error {
 		go relocate.New(cfgStore, mon, disc, cas).Run(ctx)
 	}
 
-	srv := &http.Server{
-		Addr:              o.listen,
-		Handler:           server.New(server.Deps{Monitor: mon, Config: cfgStore, Auth: auth.New(cfgStore), Discovery: disc, AllowedHosts: splitList(o.allowHosts), Version: version}),
-		ReadHeaderTimeout: 10 * time.Second,
-		IdleTimeout:       2 * time.Minute,
-		// Cancels long-lived event streams on shutdown.
-		BaseContext: func(net.Listener) context.Context { return ctx },
+	newServer := func(addr string, h http.Handler) *http.Server {
+		return &http.Server{
+			Addr:              addr,
+			Handler:           h,
+			ReadHeaderTimeout: 10 * time.Second,
+			IdleTimeout:       2 * time.Minute,
+			// Cancels long-lived event streams on shutdown.
+			BaseContext: func(net.Listener) context.Context { return ctx },
+		}
 	}
+	app := server.New(server.Deps{Monitor: mon, Config: cfgStore, Auth: auth.New(cfgStore), Discovery: disc, AllowedHosts: splitList(o.allowHosts), Version: version})
+	var servers []*http.Server
+	if o.https == "" {
+		servers = append(servers, newServer(o.listen, app))
+		slog.Info("listening", "addr", o.listen, "data", o.dataDir, "version", version)
+	} else {
+		// Keeps the password and the session cookie off the network in
+		// clear text; the plain address redirects.
+		cert, certErr := tlscert.Load(o.dataDir, tlscert.LocalNames(splitList(o.allowHosts)), time.Now())
+		if certErr != nil {
+			return certErr
+		}
+		secure := newServer(o.https, app)
+		secure.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
+		servers = append(servers, secure, newServer(o.listen, server.RedirectToHTTPS(o.https)))
+		slog.Info("listening", "https", o.https, "redirect", o.listen, "data", o.dataDir, "version", version)
+	}
+
 	serverDone := make(chan struct{})
 	go func() {
 		defer close(serverDone)
 		<-ctx.Done()
 		shutdown, stop := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer stop()
-		srv.Shutdown(shutdown)
+		for _, s := range servers {
+			s.Shutdown(shutdown)
+		}
 	}()
-	slog.Info("listening", "addr", o.listen, "data", o.dataDir, "version", version)
-	if err = srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-		return err
+	errs := make(chan error, len(servers))
+	for _, s := range servers {
+		go func() {
+			if s.TLSConfig != nil {
+				errs <- s.ListenAndServeTLS("", "")
+			} else {
+				errs <- s.ListenAndServe()
+			}
+		}()
+	}
+	// A server that cannot start, e.g. on a port in use, stops the others.
+	var failed error
+	for range servers {
+		if serveErr := <-errs; !errors.Is(serveErr, http.ErrServerClosed) && failed == nil {
+			failed = serveErr
+			cancel()
+		}
 	}
 	// Lets the requests in progress finish and the printers disconnect,
 	// which also stops the camera streams and their ffmpeg processes.
 	<-serverDone
 	select {
 	case <-monitorDone:
-		slog.Info("stopped")
+		if failed == nil {
+			slog.Info("stopped")
+		}
 	case <-time.After(shutdownTimeout):
 		slog.Warn("printers did not disconnect in time")
 	}
-	return nil
+	return failed
 }
 
 // shutdownTimeout is how long stopping waits for the requests in progress

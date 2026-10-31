@@ -40,6 +40,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 1300,
   },
   server: {
-    proxy: { '/api': 'http://localhost:8080' },
+    // bblv serve uses HTTPS with a self-signed certificate by default.
+    proxy: { '/api': { target: 'https://localhost:8443', secure: false } },
   },
 })
