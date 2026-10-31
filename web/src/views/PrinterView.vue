@@ -1,14 +1,34 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent } from 'vue'
+import { computed, defineAsyncComponent, defineComponent, h } from 'vue'
 import { useI18n } from 'vue-i18n'
 import CameraPanel from '../components/CameraPanel.vue'
 import GeometryNotice from '../components/GeometryNotice.vue'
 import StateTag from '../components/StateTag.vue'
 import StatusPanel from '../components/StatusPanel.vue'
+import { reloadForUpdate } from '../reload'
 import { connected, printers } from '../store'
 
-// Three.js is loaded only when a printer is opened.
-const PrintViewer = defineAsyncComponent(() => import('../components/PrintViewer.vue'))
+// Shown when the 3D view cannot be loaded and reloading did not help.
+const ViewerFailed = defineComponent({
+  props: { error: { type: Error, default: undefined } },
+  setup(p) {
+    const i18n = useI18n()
+    return () => h('div', { class: 'viewer-failed' }, i18n.t('viewer.loadFailed', { msg: p.error?.message ?? '' }))
+  },
+})
+
+// Three.js is loaded only when a printer is opened. A page loaded before the
+// server was updated asks for a file of the old build, which is gone; it
+// reloads to get the new one.
+const PrintViewer = defineAsyncComponent({
+  loader: () => import('../components/PrintViewer.vue'),
+  errorComponent: ViewerFailed,
+  onError(_err, _retry, fail) {
+    if (!reloadForUpdate()) {
+      fail()
+    }
+  },
+})
 
 const props = defineProps<{ id: string }>()
 const { t } = useI18n()
@@ -76,6 +96,14 @@ const printer = computed(() => printers.value.find((p) => p.id === props.id))
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.viewer-failed {
+  padding: 24px;
+  border-radius: 8px;
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-secondary);
+  text-align: center;
 }
 
 @media (max-width: 900px) {

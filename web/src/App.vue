@@ -1,17 +1,30 @@
 <script setup lang="ts">
 import en from 'element-plus/es/locale/lang/en'
 import pl from 'element-plus/es/locale/lang/pl'
-import { computed } from 'vue'
+import { computed, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { logout } from './api'
 import { setLocale, type Locale } from './i18n'
-import { auth, connected, groupByState, showLogin } from './store'
+import { reloadForUpdate } from './reload'
+import { auth, connected, groupByState, newVersion, showLogin } from './store'
 import Login from './views/Login.vue'
 
 const { t, locale } = useI18n()
 const route = useRoute()
 const elementLocale = computed(() => (locale.value === 'pl' ? pl : en))
+
+// After a server update the page reloads to get the new frontend, except in
+// the settings, where it would lose what is being typed; a banner asks there.
+watchEffect(() => {
+  if (newVersion.value && route.path !== '/settings') {
+    reloadForUpdate()
+  }
+})
+
+function reload() {
+  window.location.reload()
+}
 
 async function signOut() {
   await logout().catch(() => {})
@@ -41,8 +54,20 @@ async function signOut() {
       </el-radio-group>
     </header>
     <main class="app-main">
+      <el-alert v-if="newVersion" type="info" :closable="false" class="update">
+        <template #title>
+          <fa-icon icon="circle-info" class="ic" />{{ t('app.updated') }}
+          <el-button link type="primary" @click="reload">{{ t('app.reload') }}</el-button>
+        </template>
+      </el-alert>
       <Login v-if="auth.state === 'login'" />
       <router-view v-else-if="auth.state === 'ok'" />
     </main>
   </el-config-provider>
 </template>
+
+<style scoped>
+.update {
+  margin-bottom: 12px;
+}
+</style>

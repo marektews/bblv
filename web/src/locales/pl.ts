@@ -6,6 +6,8 @@ const pl: Messages = {
     settings: 'Ustawienia',
     logout: 'Wyloguj',
     groupByState: 'Grupuj wg stanu',
+    updated: 'bblv na serwerze został zaktualizowany.',
+    reload: 'Odśwież stronę',
   },
   login: {
     title: 'Bambu Live View',
@@ -109,6 +111,8 @@ const pl: Messages = {
     byFeature: 'Typy ścieżek',
     slot: 'slot {slot}',
     linesMode: 'Uproszczony widok (linie) dla dużego wydruku',
+    noWebGL: 'Widok 3D wymaga WebGL, którego ta przeglądarka nie obsługuje albo ma wyłączony (np. bez przyspieszania sprzętowego).',
+    contextLost: 'Przeglądarka wstrzymała widok 3D. Jeśli za chwilę nie wróci, odśwież stronę.',
   },
   camera: {
     title: 'Kamera',

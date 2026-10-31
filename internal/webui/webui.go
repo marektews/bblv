@@ -31,6 +31,10 @@ func Handler() http.Handler {
 			w.Write([]byte(placeholder))
 		})
 	}
+	return handler(files)
+}
+
+func handler(files fs.FS) http.Handler {
 	fileServer := http.FileServerFS(files)
 	var gzipped sync.Map // file name -> compressed content
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -38,6 +42,13 @@ func Handler() http.Handler {
 		if name == "" {
 			name = "index.html"
 		} else if _, err := fs.Stat(files, name); err != nil {
+			if strings.HasPrefix(name, "assets/") {
+				// A file of another build, asked for by a page loaded
+				// before an update. It has to fail for the page to reload;
+				// index.html in its place fails only as a wrong script.
+				http.NotFound(w, r)
+				return
+			}
 			name = "index.html"
 		}
 		h := w.Header()

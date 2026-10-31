@@ -28,6 +28,10 @@ export const auth = reactive({
   required: false, // a password is set
 })
 
+// newVersion is set when the server was updated after the page was loaded.
+export const newVersion = ref(false)
+let serverVersion = ''
+
 let events: EventSource | null = null
 
 // start shows the login screen when needed, otherwise follows the printers.
@@ -64,6 +68,14 @@ function connectEvents() {
   const es = new EventSource('/api/events')
   events = es
   es.addEventListener('open', () => (connected.value = true))
+  // Sent first on every connect; a restart after an update brings another one.
+  es.addEventListener('version', (e) => {
+    const version = JSON.parse((e as MessageEvent<string>).data) as string
+    if (serverVersion && version !== serverVersion) {
+      newVersion.value = true
+    }
+    serverVersion = version
+  })
   es.addEventListener('error', () => {
     connected.value = false
     // A refused stream (e.g. the session ended) is not retried by the browser.

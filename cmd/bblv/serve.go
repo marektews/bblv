@@ -120,7 +120,7 @@ func serve(ctx context.Context, o serveOptions) error {
 
 	srv := &http.Server{
 		Addr:              o.listen,
-		Handler:           server.New(server.Deps{Monitor: mon, Config: cfgStore, Auth: auth.New(cfgStore), Discovery: disc, AllowedHosts: splitList(o.allowHosts)}),
+		Handler:           server.New(server.Deps{Monitor: mon, Config: cfgStore, Auth: auth.New(cfgStore), Discovery: disc, AllowedHosts: splitList(o.allowHosts), Version: version}),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 		// Cancels long-lived event streams on shutdown.

@@ -4,6 +4,8 @@ const en = {
     settings: 'Settings',
     logout: 'Log out',
     groupByState: 'Group by state',
+    updated: 'bblv has been updated on the server.',
+    reload: 'Reload the page',
   },
   login: {
     title: 'Bambu Live View',
@@ -107,6 +109,8 @@ const en = {
     byFeature: 'Path types',
     slot: 'slot {slot}',
     linesMode: 'Simplified view (lines) for a large print',
+    noWebGL: 'The 3D view needs WebGL, which this browser does not offer or has turned off (e.g. without hardware acceleration).',
+    contextLost: 'The browser has suspended the 3D view. If it does not come back shortly, reload the page.',
   },
   camera: {
     title: 'Camera',

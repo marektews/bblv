@@ -63,7 +63,7 @@ func setupWithConfig(t *testing.T) (*httptest.Server, *config.Store) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ts := httptest.NewServer(New(Deps{Monitor: mon, Config: cfg, Auth: auth.New(cfg)}))
+	ts := httptest.NewServer(New(Deps{Monitor: mon, Config: cfg, Auth: auth.New(cfg), Version: "test"}))
 	t.Cleanup(ts.Close)
 	return ts, cfg
 }
@@ -164,6 +164,13 @@ func TestEvents(t *testing.T) {
 		t.Fatalf("content type %q", ct)
 	}
 	sc := bufio.NewScanner(resp.Body)
+	var hello []string
+	for len(hello) < 3 && sc.Scan() {
+		hello = append(hello, sc.Text())
+	}
+	if want := []string{"event: version", `data: "test"`, ""}; !reflect.DeepEqual(hello, want) {
+		t.Fatalf("first lines = %q, want %q", hello, want)
+	}
 	if !sc.Scan() || sc.Text() != "event: printer" {
 		t.Fatalf("first line %q", sc.Text())
 	}

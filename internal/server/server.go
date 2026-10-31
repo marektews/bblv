@@ -37,11 +37,12 @@ const (
 var sessionCheck = 15 * time.Second
 
 type server struct {
-	mon   *monitor.Monitor
-	cfg   *config.Store
-	auth  *auth.Auth
-	disc  *discovery.Listener
-	hosts []string
+	mon     *monitor.Monitor
+	cfg     *config.Store
+	auth    *auth.Auth
+	disc    *discovery.Listener
+	hosts   []string
+	version string
 }
 
 // Deps are the services used by the handlers.
@@ -53,11 +54,12 @@ type Deps struct {
 	// AllowedHosts are further names the server may be reached under,
 	// besides addresses and local names, e.g. that of a reverse proxy.
 	AllowedHosts []string
+	Version      string // of the server, sent to the pages
 }
 
 // New returns the HTTP handler of the application.
 func New(d Deps) http.Handler {
-	s := &server{mon: d.Monitor, cfg: d.Config, auth: d.Auth, disc: d.Discovery}
+	s := &server{mon: d.Monitor, cfg: d.Config, auth: d.Auth, disc: d.Discovery, version: d.Version}
 	for _, h := range d.AllowedHosts {
 		s.hosts = append(s.hosts, normalizeHost(h))
 	}
@@ -355,7 +357,8 @@ func (s *server) upload(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, info)
 }
 
-// events streams Server-Sent Events: a "printer" event with the printer info
+// events streams Server-Sent Events: on connect a "version" event with the
+// server version, then a "printer" event with the printer info
 // for every printer on connect and after every change, and a "removed" event
 // with the id of a printer that is no longer configured. A "ready" event with
 // the ids in configuration order follows the printers sent on connect, so that
@@ -384,6 +387,11 @@ func (s *server) events(w http.ResponseWriter, r *http.Request) {
 		}
 		_, err = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", e.Type, b)
 		return err
+	}
+	// The page reloads when the server it was loaded from has been updated.
+	v, _ := json.Marshal(s.version)
+	if _, err := fmt.Fprintf(w, "event: version\ndata: %s\n\n", v); err != nil {
+		return
 	}
 	ids := []string{}
 	for _, info := range s.mon.Printers() {
