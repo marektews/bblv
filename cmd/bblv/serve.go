@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 type serveOptions struct {
 	dataDir     string
 	listen      string
+	allowHosts  string // comma-separated
 	replay      string
 	replayModel string
 	speed       float64
@@ -39,6 +41,7 @@ func parseServeFlags(args []string) serveOptions {
 	var o serveOptions
 	fs.StringVar(&o.dataDir, "data", config.DefaultDataDir(), "data directory")
 	fs.StringVar(&o.listen, "listen", ":8080", "HTTP listen address")
+	fs.StringVar(&o.allowHosts, "allow-host", "", "comma-separated host names, besides addresses and local names, under which the web interface may be opened, e.g. that of a reverse proxy")
 	fs.StringVar(&o.replay, "replay", "", "serve a virtual printer replaying this recording instead of the configured printers")
 	fs.StringVar(&o.replayModel, "replay-model", "", "with -replay: .gcode or .3mf file used as the geometry")
 	fs.Float64Var(&o.speed, "speed", 1, "with -replay: playback speed multiplier")
@@ -56,6 +59,17 @@ func runServe(args []string) error {
 	return serve(ctx, o)
 }
 
+// splitList splits a comma-separated flag value, dropping empty items.
+func splitList(s string) []string {
+	var out []string
+	for _, item := range strings.Split(s, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
 // serve runs the web server until ctx is cancelled.
 func serve(ctx context.Context, o serveOptions) error {
 	store, err := cache.Open(filepath.Join(o.dataDir, "cache"), cache.DefaultLimit)
@@ -65,6 +79,9 @@ func serve(ctx context.Context, o serveOptions) error {
 	cfgStore, err := config.OpenStore(o.dataDir)
 	if err != nil {
 		return err
+	}
+	if err = config.ProtectDir(o.dataDir); err != nil {
+		slog.Warn("other users of this computer may read the data directory", "dir", o.dataDir, "err", err)
 	}
 	ffmpeg, _ := exec.LookPath("ffmpeg")
 	mon := monitor.New(store, ffmpeg)
@@ -103,8 +120,9 @@ func serve(ctx context.Context, o serveOptions) error {
 
 	srv := &http.Server{
 		Addr:              o.listen,
-		Handler:           server.New(server.Deps{Monitor: mon, Config: cfgStore, Auth: auth.New(cfgStore), Discovery: disc}),
+		Handler:           server.New(server.Deps{Monitor: mon, Config: cfgStore, Auth: auth.New(cfgStore), Discovery: disc, AllowedHosts: splitList(o.allowHosts)}),
 		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       2 * time.Minute,
 		// Cancels long-lived event streams on shutdown.
 		BaseContext: func(net.Listener) context.Context { return ctx },
 	}

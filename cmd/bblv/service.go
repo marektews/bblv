@@ -26,11 +26,15 @@ Installing needs an administrator prompt on Windows and root on Linux.
 `
 
 func serviceConfig(o serveOptions) *service.Config {
+	args := []string{"serve", "-data", o.dataDir, "-listen", o.listen}
+	if o.allowHosts != "" {
+		args = append(args, "-allow-host", o.allowHosts)
+	}
 	return &service.Config{
 		Name:        "bblv",
 		DisplayName: "Bambu Live View",
 		Description: "Live view of Bambu Lab 3D printers in the browser.",
-		Arguments:   []string{"serve", "-data", o.dataDir, "-listen", o.listen},
+		Arguments:   args,
 		Option:      service.KeyValue{"OnFailure": "restart"},
 	}
 }

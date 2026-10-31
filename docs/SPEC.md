@@ -114,6 +114,11 @@ Frontend wbudowany przez `go:embed` (Vite buduje do `internal/webui/dist/`; bez 
   - Sesja: ciasteczko `HttpOnly`, `SameSite=Strict`, ważne 30 dni, podpisane HMAC sekretem z `config.json`; zmiana hasła zmienia sekret (wylogowuje inne sesje, bieżąca dostaje nowe ciasteczko).
   - Błędne hasło: odpowiedź opóźniona o 1 s.
   - Zmiany (POST/PUT/DELETE) z nagłówkiem `Origin` innej strony są odrzucane; endpointy JSON wymagają `Content-Type: application/json` — bez hasła chroni to przed formularzami z obcych stron.
+  - Otwarte strumienie (SSE, kamera) co 15 s sprawdzają sesję; zmiana hasła je kończy.
+- Nagłówek `Host` musi być adresem IP, nazwą bez kropek (`localhost`, nazwa komputera), nazwą lokalną (`.local`, `.lan`, `.home.arpa`, `.internal`, `.localhost`) albo nazwą z `-allow-host`; inaczej 421. Chroni przed DNS rebinding (strona obcej domeny po przepięciu DNS na adres bblv).
+- Nagłówki: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` + `frame-ancestors 'none'` (bez osadzania w ramkach), `Referrer-Policy: no-referrer`.
+- Katalog danych dostępny tylko dla właściciela (Windows: chroniony DACL — SYSTEM, Administratorzy, właściciel katalogu; Linux: 0700).
+- Upload: max 512 MB, strumieniowo do pliku tymczasowego, 15 min na przesłanie; najwyżej 2 pliki parsowane naraz; toolpath max 5 mln punktów; miniatura i `slice_info.config` z `.3mf` max 16 MB.
 - Access Code nigdy nie wraca do przeglądarki (pole `••••`, tylko nadpisanie).
 - **Źródło Access Code** (ekran A1 pokazuje go tylko w LAN Only Mode):
   - ręczne wpisanie, z podpowiedzią gdzie go znaleźć,

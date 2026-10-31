@@ -60,9 +60,18 @@ device). Add your printers in **Settings**.
 |---|---|
 | `-data` | `%ProgramData%\bblv` on Windows, `/var/lib/bblv` on Linux |
 | `-listen` | `:8080` |
+| `-allow-host` | none: comma-separated further host names, see below |
 
-The data directory holds `config.json` (printers, password hash; readable
-only by its owner), the geometry cache (at most 1 GB), recordings,
+The web interface opens under an IP address, `localhost`, a computer name
+without dots (`http://mypc:8080`) or a local name ending in `.local`,
+`.lan`, `.home.arpa` or `.internal`. Other names are refused, which keeps
+pages of other sites from reaching bblv through DNS rebinding; name your
+own, e.g. that of a reverse proxy, with `-allow-host bblv.example.com`.
+
+On start bblv restricts the data directory to its owner (on Windows also
+to SYSTEM and the administrators), since other users of the computer
+could otherwise read the access codes. It holds `config.json` (printers,
+password hash), the geometry cache (at most 1 GB), recordings,
 `filaments.json` (filament profile names learned from print files) and
 `printer-ca.pem` (printer CA certificates learned from the printers). bblv
 itself updates the address of a printer in `config.json` when the printer

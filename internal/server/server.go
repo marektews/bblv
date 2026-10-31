@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -25,13 +27,21 @@ import (
 	"github.com/marektews/bblv/internal/webui"
 )
 
-const maxUpload = 512 << 20
+const (
+	maxUpload     = 512 << 20
+	uploadTimeout = 15 * time.Minute
+)
+
+// sessionCheck is how often open streams check that their session is still
+// valid, e.g. after the password changed.
+var sessionCheck = 15 * time.Second
 
 type server struct {
-	mon  *monitor.Monitor
-	cfg  *config.Store
-	auth *auth.Auth
-	disc *discovery.Listener
+	mon   *monitor.Monitor
+	cfg   *config.Store
+	auth  *auth.Auth
+	disc  *discovery.Listener
+	hosts []string
 }
 
 // Deps are the services used by the handlers.
@@ -40,11 +50,17 @@ type Deps struct {
 	Config    *config.Store
 	Auth      *auth.Auth
 	Discovery *discovery.Listener
+	// AllowedHosts are further names the server may be reached under,
+	// besides addresses and local names, e.g. that of a reverse proxy.
+	AllowedHosts []string
 }
 
 // New returns the HTTP handler of the application.
 func New(d Deps) http.Handler {
 	s := &server{mon: d.Monitor, cfg: d.Config, auth: d.Auth, disc: d.Discovery}
+	for _, h := range d.AllowedHosts {
+		s.hosts = append(s.hosts, normalizeHost(h))
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/auth", s.authStatus)
 	mux.HandleFunc("POST /api/login", s.login)
@@ -72,9 +88,19 @@ func New(d Deps) http.Handler {
 }
 
 // protect requires a session for the API when a password is set, and
-// rejects changes requested by pages of other sites.
+// rejects changes requested by pages of other sites, requests under names
+// of other sites and being shown in their frames.
 func (s *server) protect(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Content-Security-Policy", "frame-ancestors 'none'")
+		h.Set("Referrer-Policy", "no-referrer")
+		if !s.allowedHost(r.Host) {
+			writeError(w, http.StatusMisdirectedRequest, fmt.Sprintf("unknown host name %q; to open bblv under it, start the server with -allow-host %s", r.Host, normalizeHost(r.Host)))
+			return
+		}
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			if origin := r.Header.Get("Origin"); origin != "" {
 				if u, err := url.Parse(origin); err != nil || u.Host != r.Host {
@@ -90,6 +116,37 @@ func (s *server) protect(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// localSuffixes end names that only resolve in the local network.
+var localSuffixes = []string{".localhost", ".local", ".lan", ".home.arpa", ".internal"}
+
+// allowedHost reports whether the Host header names the server by an
+// address, a local name or an allowed name. A page of another site can
+// reach the server only under a name its owner controls (DNS rebinding),
+// which is none of them; without a password it could otherwise change the
+// address of a printer and receive its access code.
+func (s *server) allowedHost(host string) bool {
+	h := normalizeHost(host)
+	if h == "" || net.ParseIP(h) != nil || !strings.Contains(h, ".") {
+		return true // no Host (HTTP/1.0), an address, localhost or a computer name
+	}
+	for _, suffix := range localSuffixes {
+		if strings.HasSuffix(h, suffix) {
+			return true
+		}
+	}
+	return slices.Contains(s.hosts, h)
+}
+
+// normalizeHost returns the lower case name of a Host header, without the
+// port, brackets and final dot.
+func normalizeHost(host string) string {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.TrimSuffix(strings.Trim(host, "[]"), ".")
+	return strings.ToLower(host)
 }
 
 func (s *server) printers(w http.ResponseWriter, r *http.Request) {
@@ -176,10 +233,16 @@ func (s *server) camera(w http.ResponseWriter, r *http.Request) {
 	h.Set("Content-Type", "multipart/x-mixed-replace; boundary=frame")
 	h.Set("Cache-Control", "no-cache, no-store")
 	h.Set("X-Accel-Buffering", "no")
+	check := time.NewTicker(sessionCheck)
+	defer check.Stop()
 	for {
 		select {
 		case <-r.Context().Done():
 			return
+		case <-check.C:
+			if !s.auth.Valid(r) { // the password changed
+				return
+			}
 		case img, streaming := <-frames:
 			if !streaming { // the printer was removed
 				return
@@ -199,6 +262,59 @@ func (s *server) camera(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// receiveUpload streams the "file" part of a multipart form straight into
+// a temporary file, which the caller removes, and reads the "plate" field.
+func receiveUpload(r *http.Request) (name string, plate int, err error) {
+	mr, err := r.MultipartReader()
+	if err != nil {
+		return "", 0, err
+	}
+	defer func() {
+		if err != nil && name != "" {
+			os.Remove(name)
+		}
+	}()
+	for {
+		part, partErr := mr.NextPart()
+		if errors.Is(partErr, io.EOF) {
+			break
+		}
+		if partErr != nil {
+			return name, 0, partErr
+		}
+		switch part.FormName() {
+		case "plate":
+			b, _ := io.ReadAll(io.LimitReader(part, 16))
+			plate, _ = strconv.Atoi(strings.TrimSpace(string(b)))
+		case "file":
+			if name != "" {
+				return name, 0, errors.New("more than one file")
+			}
+			ext := strings.ToLower(filepath.Ext(part.FileName()))
+			if ext != ".gcode" && ext != ".3mf" {
+				return "", 0, errors.New("expected a .gcode or .3mf file")
+			}
+			tmp, tmpErr := os.CreateTemp("", "bblv-upload-*"+ext)
+			if tmpErr != nil {
+				return "", 0, tmpErr
+			}
+			name = tmp.Name()
+			_, err = io.Copy(tmp, part)
+			if cerr := tmp.Close(); err == nil {
+				err = cerr
+			}
+			if err != nil {
+				return name, 0, fmt.Errorf("upload failed: %w", err)
+			}
+		}
+		part.Close()
+	}
+	if name == "" {
+		return "", 0, errors.New("missing file")
+	}
+	return name, plate, nil
+}
+
 // upload accepts a multipart form with a .gcode or .3mf "file" and an
 // optional "plate" number and makes it the geometry of the current print.
 func (s *server) upload(w http.ResponseWriter, r *http.Request) {
@@ -208,34 +324,19 @@ func (s *server) upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxUpload)
-	file, header, err := r.FormFile("file")
+	// A large file over a slow connection takes a while, but not forever.
+	http.NewResponseController(w).SetReadDeadline(time.Now().Add(uploadTimeout))
+	name, plate, err := receiveUpload(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "missing file: "+err.Error())
+		status := http.StatusBadRequest
+		if tooLarge := (*http.MaxBytesError)(nil); errors.As(err, &tooLarge) {
+			status = http.StatusRequestEntityTooLarge
+		}
+		writeError(w, status, err.Error())
 		return
 	}
-	defer file.Close()
-	ext := strings.ToLower(filepath.Ext(header.Filename))
-	if ext != ".gcode" && ext != ".3mf" {
-		writeError(w, http.StatusBadRequest, "expected a .gcode or .3mf file")
-		return
-	}
-	plate, _ := strconv.Atoi(r.FormValue("plate"))
-
-	tmp, err := os.CreateTemp("", "bblv-upload-*"+ext)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	defer os.Remove(tmp.Name())
-	_, err = io.Copy(tmp, file)
-	if cerr := tmp.Close(); err == nil {
-		err = cerr
-	}
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "upload failed: "+err.Error())
-		return
-	}
-	res, err := printjob.BuildFile(tmp.Name(), plate, s.mon.Store())
+	defer os.Remove(name)
+	res, err := printjob.BuildFile(name, plate, s.mon.Store())
 	if pe := (*printjob.PlateError)(nil); errors.As(err, &pe) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnprocessableEntity)
@@ -297,7 +398,7 @@ func (s *server) events(w http.ResponseWriter, r *http.Request) {
 	}
 	flusher.Flush()
 
-	ping := time.NewTicker(15 * time.Second)
+	ping := time.NewTicker(sessionCheck)
 	defer ping.Stop()
 	for {
 		select {
@@ -310,6 +411,11 @@ func (s *server) events(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case <-ping.C:
+			// Ends the stream after the password changed; the browser
+			// reconnects, is refused and shows the login.
+			if !s.auth.Valid(r) {
+				return
+			}
 			if _, err := io.WriteString(w, ": ping\n\n"); err != nil {
 				return
 			}
