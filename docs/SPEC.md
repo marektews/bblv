@@ -152,7 +152,8 @@ recordings/     nagrania MQTT (.jsonl)
 
 ## 10. Budowa i wdrożenie
 - `CGO_ENABLED=0` — twarda zasada (cross-kompilacja jedną komendą).
-- Go 1.24 (`go.mod`); zależności dodawać z `GOTOOLCHAIN=local`, bo `go get …@latest` potrafi podnieść wymaganą wersję Go i pobrać nowszy toolchain.
+- Go 1.27.3 (`go.mod`); starszy zainstalowany Go pobiera ten toolchain sam (`GOTOOLCHAIN=auto`). Go 1.24.2 miało 45 podatności biblioteki standardowej na ścieżkach kodu bblv (govulncheck), dlatego CI uruchamia govulncheck.
+- Wersje zależności (npm, Go, akcje) co najmniej 14 dni od wydania; Dependabot z `cooldown: 14`. Wyjątek: łatki bezpieczeństwa Go.
 - `dist/` poza repo; skrypty `build.ps1` i `build.sh`: `npm ci --prefer-offline && npm run build`, następnie `go build -trimpath -ldflags "-s -w -X main.version=…"` dla `windows/amd64`, `linux/amd64`, `linux/arm64` (~9,5 MB każda); wersja z `git describe`.
 - `bblv service install|uninstall|start|stop|restart|status [-data … -listen …]` (`kardianos/service`): usługa Windows (restart po awarii, log w `<data>/bblv.log`) / systemd (log w journalu); ścieżka danych zapisywana jako bezwzględna.
 - `bblv record` domyślnie anonimizuje nagranie (numery seryjne, `chip_id`, `tag_uid`, `tray_uuid`, IP/maska → `REDACTED`/`SERIAL`); `-raw` zachowuje dane; `bblv anonymize` czyści starsze nagrania.
