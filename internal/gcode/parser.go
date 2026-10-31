@@ -2,6 +2,7 @@ package gcode
 
 import (
 	"bufio"
+	"errors"
 	"io"
 	"math"
 	"strconv"
@@ -14,6 +15,13 @@ const (
 	maxArcSteps    = 720
 )
 
+// MaxPoints limits the toolpath to about 150 MB in memory. Real prints
+// stay far below: a large one has a few hundred thousand points.
+var MaxPoints = 5_000_000
+
+// ErrTooLarge is returned for G-code whose toolpath exceeds MaxPoints.
+var ErrTooLarge = errors.New("the print has too many moves to show")
+
 // Parse reads G-code produced by Bambu Studio (or a slicer using the Prusa
 // style ";LAYER_CHANGE" / ";TYPE:" markers) and returns the extruded toolpath.
 // Moves before the first layer change and after the end G-code are ignored.
@@ -24,6 +32,9 @@ func Parse(r io.Reader) (*Model, error) {
 	sc.Buffer(make([]byte, 64*1024), 16*1024*1024)
 	for sc.Scan() {
 		p.line(sc.Text())
+		if len(p.m.Points) > MaxPoints {
+			return nil, ErrTooLarge
+		}
 	}
 	if err := sc.Err(); err != nil {
 		return nil, err

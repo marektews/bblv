@@ -258,9 +258,15 @@ func Build(c *ftps.Conn, f *Files, store *cache.Cache) (*Result, error) {
 	return save(store, key, model, png)
 }
 
+// parsingFiles limits how many local files are parsed at once, which bounds
+// the memory several uploads at the same time take.
+var parsingFiles = make(chan struct{}, 2)
+
 // BuildFile returns cached geometry for a local (e.g. uploaded) .gcode or
 // .3mf file, creating it when needed.
 func BuildFile(name string, plate int, store *cache.Cache) (*Result, error) {
+	parsingFiles <- struct{}{}
+	defer func() { <-parsingFiles }()
 	f, err := os.Open(name)
 	if err != nil {
 		return nil, err
@@ -446,13 +452,24 @@ func plateUsage(data []byte, plate int) []gcode.FilamentUse {
 	return nil
 }
 
+// maxZipEntry limits the thumbnail and slice info read from a .3mf, which
+// a crafted archive could unpack to gigabytes.
+const maxZipEntry = 16 << 20
+
 func readZip(zr *zip.Reader, name string) ([]byte, error) {
 	f, err := zr.Open(name)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	return io.ReadAll(f)
+	b, err := io.ReadAll(io.LimitReader(f, maxZipEntry+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > maxZipEntry {
+		return nil, fmt.Errorf("%s is larger than %d MB", name, maxZipEntry>>20)
+	}
+	return b, nil
 }
 
 func readAll(c sdCard, p string, limit int64) ([]byte, error) {
