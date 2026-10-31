@@ -157,11 +157,6 @@ const filamentProfiles = computed(() => {
     </section>
 
     <section>
-      <h4><fa-icon icon="bell" class="ic" />{{ t('status.alerts') }}</h4>
-      <AlertList :printer="printer" />
-    </section>
-
-    <section>
       <h4><fa-icon icon="circle-info" class="ic" />{{ t('status.device') }}</h4>
       <el-descriptions :column="1" size="small" border>
         <el-descriptions-item>
@@ -182,6 +177,11 @@ const filamentProfiles = computed(() => {
         </el-descriptions-item>
       </el-descriptions>
     </section>
+
+    <section>
+      <h4><fa-icon icon="bell" class="ic" />{{ t('status.alerts') }}</h4>
+      <AlertList :printer="printer" />
+    </section>
   </div>
 </template>
 
@@ -190,6 +190,22 @@ const filamentProfiles = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/* Every group's table gives its labels the same share of the panel, so
+   that the columns of the groups line up instead of fitting their own
+   longest label. */
+.status-panel :deep(.el-descriptions__table) {
+  table-layout: fixed;
+}
+
+.status-panel :deep(.el-descriptions__label) {
+  width: 46%;
+}
+
+/* Long values, e.g. file names without spaces, wrap inside their column. */
+.status-panel :deep(.el-descriptions__content) {
+  overflow-wrap: anywhere;
 }
 
 h4 {
