@@ -35,7 +35,12 @@ export async function loadGeometry(url: string, signal?: AbortSignal): Promise<L
   if (!resp.ok) {
     throw new Error(`HTTP ${resp.status}`)
   }
-  const buf = await resp.arrayBuffer()
+  return parseGeometry(await resp.arrayBuffer())
+}
+
+// parseGeometry decodes the binary format; geometry.test.ts checks it
+// against a file written by the Go encoder.
+export function parseGeometry(buf: ArrayBuffer): LoadedGeometry {
   const view = new DataView(buf)
   if (buf.byteLength < 12 || String.fromCharCode(...new Uint8Array(buf, 0, 4)) !== 'BBLG') {
     throw new Error('invalid geometry data')

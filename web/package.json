@@ -2,11 +2,16 @@
   "name": "bblv-web",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "typecheck": "vue-tsc --noEmit",
-    "shadowcheck": "node scripts/shadowcheck.cjs"
+    "shadowcheck": "node scripts/shadowcheck.cjs",
+    "i18ncheck": "node scripts/i18ncheck.cjs",
+    "test": "vitest run"
   },
   "dependencies": {
     "@fortawesome/fontawesome-svg-core": "^7.3.1",
@@ -15,7 +20,7 @@
     "element-plus": "^2.14.7",
     "three": "^0.186.1",
     "vue": "^3.5.43",
-    "vue-i18n": "^11.4.13",
+    "vue-i18n": "^11.4.14",
     "vue-router": "^5.3.1"
   },
   "devDependencies": {
@@ -23,7 +28,8 @@
     "@types/three": "^0.186.0",
     "@vitejs/plugin-vue": "^6.0.9",
     "typescript": "^6.0.3",
-    "vite": "^8.3.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5",
     "vue-tsc": "^3.3.12"
   }
 }
