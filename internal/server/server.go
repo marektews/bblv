@@ -81,6 +81,7 @@ func New(d Deps) http.Handler {
 	mux.HandleFunc("GET /api/printers/{id}/camera", s.camera)
 	mux.HandleFunc("GET /api/printers/{id}/alerts", s.alerts)
 	mux.HandleFunc("POST /api/printers/{id}/upload", s.upload)
+	mux.HandleFunc("POST /api/printers/{id}/light", s.light)
 	mux.HandleFunc("GET /api/events", s.events)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not found")

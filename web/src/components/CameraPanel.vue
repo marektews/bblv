@@ -1,10 +1,32 @@
 <script setup lang="ts">
+import { ElMessage } from 'element-plus'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { PrinterInfo } from '../api'
+import { setLight, type PrinterInfo } from '../api'
 
 const props = defineProps<{ printer: PrinterInfo }>()
 const { t, te } = useI18n()
+
+// The chamber light, mainly to see the print on the camera at night.
+const hasLight = computed(() => props.printer.online && !!props.printer.status.chamberLight)
+const lightOn = computed(() => props.printer.status.chamberLight === 'on')
+const wantedLight = ref<boolean | null>(null) // asked for, until the printer reports it
+let lightTimer = 0
+const switching = computed(() => wantedLight.value !== null && wantedLight.value !== lightOn.value)
+
+async function toggleLight() {
+  const on = !lightOn.value
+  wantedLight.value = on
+  clearTimeout(lightTimer)
+  // The printer reports the new mode within a second; stop waiting if not.
+  lightTimer = window.setTimeout(() => (wantedLight.value = null), 5000)
+  try {
+    await setLight(props.printer.id, on)
+  } catch (err) {
+    wantedLight.value = null
+    ElMessage.error(t('camera.lightFailed', { msg: err instanceof Error ? err.message : String(err) }))
+  }
+}
 
 // Causes the server knows before the stream is opened, which would only fail.
 const blocked = computed(() => ['liveview-disabled', 'ffmpeg-missing'].includes(props.printer.cameraError ?? ''))
@@ -110,6 +132,7 @@ document.addEventListener('visibilitychange', onVisibilityChange)
 
 onBeforeUnmount(() => {
   clearTimeout(retry)
+  clearTimeout(lightTimer)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   document.removeEventListener('keydown', onKey)
   document.removeEventListener('visibilitychange', onVisibilityChange)
@@ -124,6 +147,20 @@ onBeforeUnmount(() => {
     </button>
     <div v-if="open" ref="frame" class="frame" :class="{ full, pseudo }" @dblclick="loaded && toggleFullscreen()">
       <img v-if="src" :src="src" alt="" @load="onLoad" @error="onError" />
+      <button
+        v-if="hasLight"
+        class="light"
+        :class="{ on: lightOn }"
+        type="button"
+        :title="lightOn ? t('camera.lightOff') : t('camera.lightOn')"
+        :aria-label="lightOn ? t('camera.lightOff') : t('camera.lightOn')"
+        :aria-pressed="lightOn"
+        :disabled="switching"
+        @click="toggleLight"
+        @dblclick.stop
+      >
+        <fa-icon :icon="switching ? 'spinner' : 'lightbulb'" :spin="switching" />
+      </button>
       <button
         v-if="loaded"
         class="fullscreen"
@@ -219,6 +256,37 @@ h4 {
 .fullscreen:hover,
 .fullscreen:focus-visible {
   opacity: 1;
+}
+
+/* Opposite the fullscreen button, above the hints while connecting. */
+.light {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 1;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 50%);
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.light.on {
+  color: #ffd43b;
+  opacity: 1;
+}
+
+.light:hover,
+.light:focus-visible {
+  opacity: 1;
+}
+
+.light:disabled {
+  cursor: progress;
 }
 
 .hint {

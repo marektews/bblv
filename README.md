@@ -17,7 +17,10 @@ account needed, works on Windows and Linux (including a Raspberry Pi).
   alerts and error codes explained in English or Polish. See
   [Dashboard and printer view](#dashboard-and-printer-view).
 - **Camera** stream (A1 and P1 series; X1, X2, H2 and P2 with ffmpeg installed),
-  also in full screen; when it does not work, the panel says why.
+  also in full screen; when it does not work, the panel says why. A button
+  in its corner switches the printer's light, the only thing bblv changes
+  on a printer; the A1 accepts it also in cloud mode, without LAN only or
+  developer mode.
 - **Several printers** on one dashboard, grouped by state.
 - **Web settings**: printers found in the network are listed automatically;
   access codes can be imported from Bambu Studio.

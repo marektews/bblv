@@ -58,6 +58,7 @@ export interface Status {
   sdTotalKb: number // 0 when not reported
   sdFreeKb: number
   lanLiveView: '' | 'enabled' | 'disabled' // '' for printers without an RTSP camera
+  chamberLight: string // 'on', 'off', or '' for a printer without a chamber light
 }
 
 export type GeometryState = 'none' | 'loading' | 'ready' | 'missing' | 'error'
@@ -259,4 +260,10 @@ export function importCodes(file?: File): Promise<ImportResult> {
   const form = new FormData()
   form.append('file', file)
   return request('POST', '/api/config/import-codes', form)
+}
+
+// setLight switches the chamber light of a printer; the printer's next
+// report shows the new mode.
+export function setLight(id: string, on: boolean): Promise<void> {
+  return request('POST', `${printerUrl(id)}/light`, { on })
 }

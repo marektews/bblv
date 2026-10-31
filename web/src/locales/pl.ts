@@ -126,6 +126,9 @@ const pl: Messages = {
     unavailable: 'Kamera niedostępna, ponawiam…',
     fullscreen: 'Pełny ekran',
     exitFullscreen: 'Zamknij pełny ekran',
+    lightOn: 'Włącz oświetlenie',
+    lightOff: 'Wyłącz oświetlenie',
+    lightFailed: 'Nie udało się przełączyć światła: {msg}',
     errors: {
       liveviewDisabled: 'Drukarka zgłasza, że podgląd na żywo w sieci lokalnej jest wyłączony. Włącz go w ustawieniach sieci drukarki.',
       ffmpegMissing: 'Kamera tego modelu wymaga programu ffmpeg na serwerze.',

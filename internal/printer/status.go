@@ -38,6 +38,9 @@ type Status struct {
 	// camera, which report ipcam.rtsp_url, and "" for the others.
 	LANLiveView string `json:"lanLiveView"`
 	RTSPURL     string `json:"-"` // ipcam.rtsp_url: "disable" or the stream address
+	// ChamberLight is "on" or "off" as lights_report gives it, "" for a
+	// printer that reports no chamber light.
+	ChamberLight string `json:"chamberLight"`
 	// AMSMapping maps the print's filaments to AMS slots (unit*4+slot) on
 	// printers that report it; the others keep it in the .bbl file.
 	AMSMapping []int `json:"-"`
@@ -179,6 +182,13 @@ func statusFrom(state map[string]any) Status {
 		s.LANLiveView = "disabled"
 	default:
 		s.LANLiveView = "enabled"
+	}
+	if lights, ok := p["lights_report"].([]any); ok {
+		for _, it := range lights {
+			if l, isObj := it.(map[string]any); isObj && str(l, "node") == "chamber_light" {
+				s.ChamberLight = str(l, "mode")
+			}
+		}
 	}
 
 	if mods, ok := obj(state, "info")["module"].([]any); ok {

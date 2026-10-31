@@ -124,6 +124,9 @@ const en = {
     unavailable: 'Camera unavailable, retrying…',
     fullscreen: 'Full screen',
     exitFullscreen: 'Exit full screen',
+    lightOn: 'Turn the light on',
+    lightOff: 'Turn the light off',
+    lightFailed: 'Could not switch the light: {msg}',
     errors: {
       liveviewDisabled: "The printer reports that LAN live view is disabled. Enable it in the printer's network settings.",
       ffmpegMissing: 'The camera of this model needs ffmpeg on the server.',

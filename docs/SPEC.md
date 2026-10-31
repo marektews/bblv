@@ -25,7 +25,7 @@ Drukarka pozostaje w **trybie chmurowym** — LAN Only Mode i Developer Mode **n
 
 | Kanał | Port | Użycie |
 |---|---|---|
-| MQTT over TLS | 8883 | raporty stanu (tylko odczyt); login `bblp`, hasło = Access Code; topic `device/{serial}/report`, żądania `get_version` i `pushall` na `device/{serial}/request` |
+| MQTT over TLS | 8883 | raporty stanu; login `bblp`, hasło = Access Code; topic `device/{serial}/report`, żądania `get_version` i `pushall` na `device/{serial}/request`; jedyne polecenie sterujące: `ledctrl` dla `chamber_light` (A1 w trybie chmurowym je przyjmuje, odpowiada `"result":"success"` i nowym `lights_report`) |
 | FTPS (implicit TLS) | 990 | pobranie plików wydruku z karty SD; **tylko ścieżki względne** (`cache/...`) — absolutne (`/cache/...`) zwracają `550`; PASV (EPSV wyłączone) |
 | Kamera A1/P1 | 6000 | TLS, pakiet autoryzacji 80 B (`bblp` + Access Code), ramki: nagłówek 16 B (rozmiar LE) + JPEG 1536×1080 (~150 KB); zmierzone ~0,7 kl./s po zakończonym wydruku, pierwsza klatka po ~4,5 s |
 | Kamera X1/H2D | 322 | RTSPS, H.264 — przez zewnętrzny `ffmpeg` (jeśli w PATH) → MJPEG; bez ffmpeg brak kamery |
@@ -95,6 +95,7 @@ Stan (przygotowanie/druk/pauza/koniec/błąd), %, warstwa X/Y, pozostały czas +
 | GET | `/api/printers/{id}/thumbnail` | miniatura z `.3mf` |
 | GET | `/api/printers/{id}/camera` | MJPEG (`multipart/x-mixed-replace`); `camera: true` w opisie drukarki, gdy dostępna |
 | POST | `/api/printers/{id}/upload` | ręczny upload G-code / 3MF |
+| POST | `/api/printers/{id}/light` | `{on}` — włącza/wyłącza `chamber_light`; 409 dla drukarki bez światła, offline albo replay; stan wraca w `status.chamberLight` |
 | GET | `/api/auth` | `{required, authenticated}` |
 | GET | `/api/config` | drukarki (bez Access Code, tylko `hasAccessCode`), `passwordSet`, ścieżka `BambuStudio.conf` |
 | POST/PUT/DELETE | `/api/config/printers[/{id}]` | dodanie / zmiana (pusty kod = bez zmiany, adres: IP albo nazwa hosta) / usunięcie; monitor śledzi zapis (`Store.Watch`) |

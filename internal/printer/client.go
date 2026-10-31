@@ -98,6 +98,32 @@ func (c *Client) Close() {
 	c.conn.Disconnect(250)
 }
 
+// ErrNotConnected is returned for a command while the printer is offline.
+var ErrNotConnected = errors.New("the printer is not connected")
+
+// SetLight switches the chamber light on or off. The printer answers with
+// "result":"success" and reports the new mode in lights_report; on an A1 in
+// cloud mode it accepts the command without LAN-only or developer mode.
+func (c *Client) SetLight(on bool) error {
+	if !c.conn.IsConnectionOpen() {
+		return ErrNotConnected
+	}
+	t := c.conn.Publish("device/"+c.p.Serial+"/request", 0, false, lightCommand(on))
+	if !t.WaitTimeout(5 * time.Second) {
+		return errors.New("the printer did not take the command in time")
+	}
+	return t.Error()
+}
+
+func lightCommand(on bool) string {
+	mode := "off"
+	if on {
+		mode = "on"
+	}
+	return `{"system":{"sequence_id":"0","command":"ledctrl","led_node":"chamber_light","led_mode":"` + mode +
+		`","led_on_time":500,"led_off_time":500,"loop_times":0,"interval_time":0}}`
+}
+
 // Status returns a typed snapshot of the current state.
 func (c *Client) Status() Status {
 	return c.state.Status()

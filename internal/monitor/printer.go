@@ -303,10 +303,41 @@ type source interface {
 	run(ctx context.Context, status func(printer.Status), online func(bool))
 }
 
+// lightSwitch is a source that can switch the printer's chamber light; a
+// replay cannot.
+type lightSwitch interface {
+	setLight(on bool) error
+}
+
+// ErrNotSupported is returned for a command a printer cannot carry out.
+var ErrNotSupported = errors.New("not supported by this printer")
+
+// setLight switches the chamber light of a printer that reports one.
+func (p *Printer) setLight(on bool) error {
+	p.mu.Lock()
+	hasLight := p.status.ChamberLight != ""
+	p.mu.Unlock()
+	ls, ok := p.src.(lightSwitch)
+	if !ok || !hasLight {
+		return ErrNotSupported
+	}
+	return ls.setLight(on)
+}
+
 type mqttSource struct {
 	cfg    config.Printer
 	cas    *trust.Store
-	failed func(error) // why connecting failed, nil once connected
+	failed func(error)                    // why connecting failed, nil once connected
+	client atomic.Pointer[printer.Client] // while running, for commands
+}
+
+// setLight switches the chamber light of the printer.
+func (s *mqttSource) setLight(on bool) error {
+	c := s.client.Load()
+	if c == nil {
+		return printer.ErrNotConnected
+	}
+	return c.SetLight(on)
 }
 
 func (s *mqttSource) report(err error) {
@@ -319,6 +350,8 @@ func (s *mqttSource) run(ctx context.Context, status func(printer.Status), onlin
 	var c *printer.Client
 	c = printer.New(s.cfg, s.cas, func(printer.Report) { status(c.Status()) })
 	c.OnConnection(online)
+	s.client.Store(c)
+	defer s.client.Store(nil)
 	// Also abandons a connection attempt still in progress, which would
 	// otherwise leave a session open on the printer.
 	defer c.Close()

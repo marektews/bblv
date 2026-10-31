@@ -386,6 +386,16 @@ func (m *Monitor) Serial(id string) string {
 	return ""
 }
 
+// SetLight switches the chamber light of a printer on or off; it fails with
+// ErrNotSupported for a printer without one or a replay.
+func (m *Monitor) SetLight(id string, on bool) error {
+	p := m.find(id)
+	if p == nil {
+		return ErrUnknownPrinter
+	}
+	return p.setLight(on)
+}
+
 // Camera returns the camera of a printer, nil when it has none.
 func (m *Monitor) Camera(id string) *camera.Hub {
 	if p := m.find(id); p != nil {
