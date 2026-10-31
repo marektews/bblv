@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"context"
 	"encoding/json"
 	"path/filepath"
 	"strings"
@@ -28,14 +29,14 @@ func TestFetchOnNewPrintAndRetry(t *testing.T) {
 	calls := make(chan job, 10)
 	results := make(chan Geometry)
 	p := newPrinter(m, "p", "", "A1", nil)
-	p.fetcher = func(j job) Geometry {
+	p.fetcher = func(_ context.Context, j job) Geometry {
 		calls <- j
 		return <-results
 	}
 	m.add(p)
 	state := func() string { return p.info().Geometry.State }
 
-	p.onStatus(printer.Status{State: "PREPARE", Subtask: "a", TaskID: "1"})
+	p.onStatus(t.Context(), printer.Status{State: "PREPARE", Subtask: "a", TaskID: "1"})
 	if j := <-calls; j.subtask != "a" {
 		t.Fatalf("job = %+v", j)
 	}
@@ -46,7 +47,7 @@ func TestFetchOnNewPrintAndRetry(t *testing.T) {
 	eventually(t, func() bool { return state() == GeometryMissing })
 
 	// Too early for a retry.
-	p.onStatus(printer.Status{State: "RUNNING", Subtask: "a", TaskID: "1", Layer: 1})
+	p.onStatus(t.Context(), printer.Status{State: "RUNNING", Subtask: "a", TaskID: "1", Layer: 1})
 	select {
 	case j := <-calls:
 		t.Fatalf("unexpected retry %+v", j)
@@ -56,7 +57,7 @@ func TestFetchOnNewPrintAndRetry(t *testing.T) {
 	p.mu.Lock()
 	p.lastAttempt = time.Now().Add(-time.Minute)
 	p.mu.Unlock()
-	p.onStatus(printer.Status{State: "RUNNING", Subtask: "a", TaskID: "1", Layer: 2})
+	p.onStatus(t.Context(), printer.Status{State: "RUNNING", Subtask: "a", TaskID: "1", Layer: 2})
 	<-calls
 	results <- Geometry{State: GeometryReady, Key: "k1"}
 	eventually(t, func() bool { return p.info().Geometry.Key == "k1" })
@@ -65,7 +66,7 @@ func TestFetchOnNewPrintAndRetry(t *testing.T) {
 	}
 
 	// Another print with the same name but a new task id is fetched again.
-	p.onStatus(printer.Status{State: "PREPARE", Subtask: "a", TaskID: "2"})
+	p.onStatus(t.Context(), printer.Status{State: "PREPARE", Subtask: "a", TaskID: "2"})
 	<-calls
 	results <- Geometry{State: GeometryReady, Key: "k2"}
 	eventually(t, func() bool { return p.info().Geometry.Key == "k2" })
@@ -75,11 +76,11 @@ func TestNoFetchWithoutSDCard(t *testing.T) {
 	m := New(nil, "")
 	calls := make(chan job, 10)
 	p := newPrinter(m, "p", "", "H2D", nil)
-	p.fetcher = func(j job) Geometry {
+	p.fetcher = func(_ context.Context, j job) Geometry {
 		calls <- j
 		return Geometry{State: GeometryReady}
 	}
-	p.onStatus(printer.Status{State: "RUNNING", Subtask: "a", NoSDCard: true})
+	p.onStatus(t.Context(), printer.Status{State: "RUNNING", Subtask: "a", NoSDCard: true})
 	select {
 	case j := <-calls:
 		t.Fatalf("fetched %+v without an SD card", j)
@@ -89,7 +90,7 @@ func TestNoFetchWithoutSDCard(t *testing.T) {
 		t.Fatalf("geometry = %+v", g)
 	}
 	// A card is inserted.
-	p.onStatus(printer.Status{State: "RUNNING", Subtask: "a", SDCard: true})
+	p.onStatus(t.Context(), printer.Status{State: "RUNNING", Subtask: "a", SDCard: true})
 	<-calls
 	eventually(t, func() bool { return p.info().Geometry.State == GeometryReady })
 }
@@ -98,17 +99,17 @@ func TestFinishedPrintIsNotRetried(t *testing.T) {
 	m := New(nil, "")
 	calls := make(chan job, 10)
 	p := newPrinter(m, "p", "", "X1C", nil)
-	p.fetcher = func(j job) Geometry {
+	p.fetcher = func(_ context.Context, j job) Geometry {
 		calls <- j
 		return Geometry{State: GeometryMissing}
 	}
-	p.onStatus(printer.Status{State: "FINISH", Subtask: "a"})
+	p.onStatus(t.Context(), printer.Status{State: "FINISH", Subtask: "a"})
 	<-calls
 	eventually(t, func() bool { return p.info().Geometry.State == GeometryMissing })
 	p.mu.Lock()
 	p.lastAttempt = time.Now().Add(-time.Minute)
 	p.mu.Unlock()
-	p.onStatus(printer.Status{State: "FINISH", Subtask: "a", Percent: 100})
+	p.onStatus(t.Context(), printer.Status{State: "FINISH", Subtask: "a", Percent: 100})
 	select {
 	case <-calls:
 		t.Fatal("finished print retried")
@@ -142,7 +143,7 @@ func TestCameraErrorFromReport(t *testing.T) {
 		{"H2D", "", "enabled", "ffmpeg-missing"},
 		{"X2D", "/usr/bin/ffmpeg", "enabled", ""}, // not known before the stream runs
 	} {
-		p := New(nil, tc.ffmpeg).networkPrinter(config.Printer{ID: "p", Model: tc.model, Host: "10.0.0.5"})
+		p := New(nil, tc.ffmpeg).networkPrinter(config.Printer{ID: "p", Model: tc.model, Host: "10.0.0.5"}, nil)
 		p.status.LANLiveView = tc.liveView
 		if got := p.info().CameraError; got != tc.want {
 			t.Errorf("%s ffmpeg=%q liveView=%q: cameraError = %q, want %q", tc.model, tc.ffmpeg, tc.liveView, got, tc.want)

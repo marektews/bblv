@@ -180,7 +180,10 @@ func (s *server) camera(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-r.Context().Done():
 			return
-		case img := <-frames:
+		case img, streaming := <-frames:
+			if !streaming { // the printer was removed
+				return
+			}
 			if _, err := fmt.Fprintf(w, "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n", len(img)); err != nil {
 				return
 			}
@@ -300,8 +303,10 @@ func (s *server) events(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-r.Context().Done():
 			return
-		case e := <-updates:
-			if emit(e) != nil {
+		case e, subscribed := <-updates:
+			// Fell too far behind: the browser reconnects and gets every
+			// printer again.
+			if !subscribed || emit(e) != nil {
 				return
 			}
 		case <-ping.C:

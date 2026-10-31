@@ -33,10 +33,10 @@ type Printer struct {
 	id, name, model string
 	cfg             config.Printer
 	src             source
-	fetcher         func(job) Geometry // nil when geometry can only be uploaded
-	camera          *camera.Hub        // nil when the camera is not available
-	rtsp            bool               // the camera streams RTSP through ffmpeg
-	stop            context.CancelFunc // set while running
+	fetcher         func(context.Context, job) Geometry // nil when geometry can only be uploaded
+	camera          *camera.Hub                         // nil when the camera is not available
+	rtsp            bool                                // the camera streams RTSP through ffmpeg
+	stop            context.CancelFunc                  // set while running
 	removed         atomic.Bool
 
 	mu          sync.Mutex
@@ -54,24 +54,37 @@ type job struct {
 }
 
 func newPrinter(m *Monitor, id, name, model string, src source) *Printer {
-	if name == "" {
-		name = id
-	}
 	// Until the first report the status is that of an empty one, which has
 	// empty lists where the zero Status would give null in the JSON.
-	return &Printer{m: m, id: id, name: name, model: model, src: src, status: printer.NewState().Status(), geom: Geometry{State: GeometryNone}}
+	return &Printer{m: m, id: id, name: displayName(id, name), model: model, src: src, status: printer.NewState().Status(), geom: Geometry{State: GeometryNone}}
 }
 
+// displayName is the name shown for a printer: the configured one, or its ID.
+func displayName(id, name string) string {
+	if name == "" {
+		return id
+	}
+	return name
+}
+
+// run follows the printer until ctx ends, which also interrupts a download
+// of print files in progress.
 func (p *Printer) run(ctx context.Context) {
-	p.src.run(ctx, p.onStatus, p.onConnection)
+	p.src.run(ctx, func(s printer.Status) { p.onStatus(ctx, s) }, p.onConnection)
 }
 
-// close stops the printer after it was removed or replaced.
-func (p *Printer) close() {
+// retire stops the printer after it was replaced; its camera passes on to
+// the printer replacing it.
+func (p *Printer) retire() {
 	p.removed.Store(true)
 	if p.stop != nil {
 		p.stop()
 	}
+}
+
+// close stops the printer after it was removed.
+func (p *Printer) close() {
+	p.retire()
 	if p.camera != nil {
 		p.camera.Close()
 	}
@@ -145,7 +158,7 @@ func (p *Printer) onConnection(ok bool) {
 	}
 }
 
-func (p *Printer) onStatus(s printer.Status) {
+func (p *Printer) onStatus(ctx context.Context, s printer.Status) {
 	p.mu.Lock()
 	if p.online && reflect.DeepEqual(p.status, s) {
 		p.mu.Unlock()
@@ -158,7 +171,7 @@ func (p *Printer) onStatus(s printer.Status) {
 	p.mu.Unlock()
 	p.publish(info)
 	if j != nil {
-		go p.fetch(*j)
+		go p.fetch(ctx, *j)
 	}
 }
 
@@ -193,8 +206,8 @@ func (p *Printer) nextJob(s printer.Status) *job {
 	return &job{id: id, subtask: s.Subtask, gcodeFile: s.GcodeFile}
 }
 
-func (p *Printer) fetch(j job) {
-	g := p.fetcher(j)
+func (p *Printer) fetch(ctx context.Context, j job) {
+	g := p.fetcher(ctx, j)
 	g.Subtask = j.subtask
 	// Also when the print has changed meanwhile, its profiles name spools.
 	defer p.m.learnFilaments(g.Settings)
@@ -210,9 +223,9 @@ func (p *Printer) fetch(j job) {
 	p.publish(info)
 }
 
-func (p *Printer) fetchFTPS(j job) Geometry {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
+// fetchFTPS downloads and parses the print files. The download ends when
+// ctx does or when the printer stops sending for a while.
+func (p *Printer) fetchFTPS(ctx context.Context, j job) Geometry {
 	fail := func(err error) Geometry {
 		slog.Warn("geometry fetch failed", "printer", p.id, "print", j.subtask, "err", err)
 		return Geometry{State: GeometryError, Error: err.Error()}

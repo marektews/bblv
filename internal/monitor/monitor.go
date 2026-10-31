@@ -91,7 +91,27 @@ type Monitor struct {
 // New creates an empty monitor storing geometry in store. ffmpeg is the path
 // of the ffmpeg binary used for RTSP cameras, "" when not available.
 func New(store *cache.Cache, ffmpeg string) *Monitor {
-	return &Monitor{store: store, ffmpeg: ffmpeg, subs: map[chan Event]struct{}{}}
+	m := &Monitor{store: store, ffmpeg: ffmpeg, subs: map[chan Event]struct{}{}}
+	if store != nil {
+		store.KeepInUse(m.geometryKeys)
+	}
+	return m
+}
+
+// geometryKeys returns the cache keys of the geometry the printers show,
+// which the cache must not evict.
+func (m *Monitor) geometryKeys() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var keys []string
+	for _, p := range m.printers {
+		p.mu.Lock()
+		if p.geom.State == GeometryReady {
+			keys = append(keys, p.geom.Key)
+		}
+		p.mu.Unlock()
+	}
+	return keys
 }
 
 // KeepFilamentNames loads the names of filament profiles learned before
@@ -113,13 +133,14 @@ func (m *Monitor) learnFilaments(s *gcode.Settings) {
 
 // AddPrinter adds a printer reached over the local network.
 func (m *Monitor) AddPrinter(cfg config.Printer) {
-	m.add(m.networkPrinter(cfg))
+	m.add(m.networkPrinter(cfg, nil))
 }
 
-// ReplacePrinter applies a changed configuration by reconnecting the printer
-// with the same ID, keeping its position.
+// ReplacePrinter applies a changed configuration to the printer with the
+// same ID, keeping its position. A new name is only shown; other changes
+// reconnect the printer. The geometry of the current print stays while the
+// serial number does, and viewers of the camera stay connected.
 func (m *Monitor) ReplacePrinter(cfg config.Printer) error {
-	p := m.networkPrinter(cfg)
 	m.mu.Lock()
 	i := m.index(cfg.ID)
 	if i < 0 {
@@ -127,10 +148,28 @@ func (m *Monitor) ReplacePrinter(cfg config.Printer) error {
 		return ErrUnknownPrinter
 	}
 	old := m.printers[i]
+	renamed := old.cfg
+	renamed.Name = cfg.Name
+	if renamed == cfg {
+		old.mu.Lock()
+		old.name = displayName(cfg.ID, cfg.Name)
+		old.mu.Unlock()
+		m.mu.Unlock()
+		old.publish(old.info())
+		return nil
+	}
+	p := m.networkPrinter(cfg, old.camera)
+	if strings.EqualFold(old.cfg.Serial, cfg.Serial) {
+		old.mu.Lock()
+		if old.geom.State == GeometryReady {
+			p.geom, p.job = old.geom, old.job
+		}
+		old.mu.Unlock()
+	}
 	m.printers[i] = p
 	m.startLocked(p)
 	m.mu.Unlock()
-	old.close()
+	old.retire()
 	m.publish(Event{Type: "printer", Info: p.info()})
 	return nil
 }
@@ -151,7 +190,9 @@ func (m *Monitor) RemovePrinter(id string) error {
 	return nil
 }
 
-func (m *Monitor) networkPrinter(cfg config.Printer) *Printer {
+// networkPrinter creates a printer reached over the network. A printer
+// replacing another takes over its camera hub, switched to the new source.
+func (m *Monitor) networkPrinter(cfg config.Printer, hub *camera.Hub) *Printer {
 	p := newPrinter(m, cfg.ID, cfg.Name, cfg.Model, &mqttSource{cfg: cfg})
 	p.fetcher = p.fetchFTPS
 	p.cfg = cfg
@@ -160,8 +201,19 @@ func (m *Monitor) networkPrinter(cfg config.Printer) *Printer {
 	if p.rtsp {
 		src = camera.FFmpeg(m.ffmpeg, cfg.Host, cfg.AccessCode, p.reportedRTSP)
 	}
-	p.camera = camera.NewHub(cfg.ID, src)
-	p.camera.OnChange(func() { p.publish(p.info()) })
+	if hub != nil {
+		hub.SetSource(src)
+	} else {
+		hub = camera.NewHub(cfg.ID, src)
+		// The hub outlives the printers it passes between, so it updates
+		// whichever printer has the ID now.
+		hub.OnChange(func() {
+			if q := m.find(cfg.ID); q != nil {
+				q.publish(q.info())
+			}
+		})
+	}
+	p.camera = hub
 	return p
 }
 
@@ -297,10 +349,15 @@ func (m *Monitor) Store() *cache.Cache {
 	return m.store
 }
 
+// subscriberBuffer is how many events a subscriber may fall behind.
+const subscriberBuffer = 64
+
 // Subscribe returns a channel receiving an event after every change
-// and a function to unsubscribe. Slow subscribers miss updates.
+// and a function to unsubscribe. The channel of a subscriber that falls
+// too far behind is closed, as it would otherwise miss events; it has to
+// subscribe again and fetch the current state.
 func (m *Monitor) Subscribe() (<-chan Event, func()) {
-	ch := make(chan Event, 64)
+	ch := make(chan Event, subscriberBuffer)
 	m.mu.Lock()
 	m.subs[ch] = struct{}{}
 	m.mu.Unlock()
@@ -318,6 +375,8 @@ func (m *Monitor) publish(e Event) {
 		select {
 		case ch <- e:
 		default:
+			delete(m.subs, ch)
+			close(ch)
 		}
 	}
 }
