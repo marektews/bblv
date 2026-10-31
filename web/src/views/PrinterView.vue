@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent, defineComponent, h } from 'vue'
 import { useI18n } from 'vue-i18n'
 import CameraPanel from '../components/CameraPanel.vue'
+import FilamentPanel from '../components/FilamentPanel.vue'
 import GeometryNotice from '../components/GeometryNotice.vue'
 import StateTag from '../components/StateTag.vue'
 import StatusPanel from '../components/StatusPanel.vue'
@@ -51,6 +52,7 @@ const printer = computed(() => printers.value.find((p) => p.id === props.id))
       <section class="main">
         <GeometryNotice :printer="printer" />
         <PrintViewer :key="printer.id" :printer="printer" />
+        <FilamentPanel :printer="printer" />
       </section>
       <aside class="side">
         <CameraPanel v-if="printer.camera" :key="printer.id" :printer="printer" />
@@ -106,7 +108,8 @@ const printer = computed(() => printers.value.find((p) => p.id === props.id))
 
 /* The last report of an offline printer: AMS, alerts and the device are
    no longer current. Sections, as on a phone their panel has no box. */
-.offline :deep(.status-panel > section) {
+.offline :deep(.status-panel > section),
+.offline :deep(.filament-panel) {
   opacity: 0.55;
 }
 

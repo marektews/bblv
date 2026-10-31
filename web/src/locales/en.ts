@@ -116,6 +116,10 @@ const en = {
     unlock: 'Turn the model',
     lock: 'Lock the model',
   },
+  filament: {
+    externalShort: 'Ext.',
+    left: 'Left on the spool',
+  },
   camera: {
     title: 'Camera',
     show: 'Show',

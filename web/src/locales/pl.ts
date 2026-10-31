@@ -118,6 +118,10 @@ const pl: Messages = {
     unlock: 'Obracaj model',
     lock: 'Zablokuj model',
   },
+  filament: {
+    externalShort: 'Zewn.',
+    left: 'Zostało na szpuli',
+  },
   camera: {
     title: 'Kamera',
     show: 'Pokaż',
