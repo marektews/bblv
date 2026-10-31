@@ -37,9 +37,17 @@ const native = ref(false) // the frame is the browser's fullscreen element
 const pseudo = ref(false) // fills the window where the Fullscreen API is missing (iPhone)
 const full = computed(() => native.value || pseudo.value)
 
+// A tab in the background does not stream: the server stops reading the
+// camera when nobody watches, and browsers allow only six connections to a
+// server, which a few such tabs would use up.
+const visible = ref(document.visibilityState !== 'hidden')
+function onVisibilityChange() {
+  visible.value = document.visibilityState !== 'hidden'
+}
+
 // The browser closes the MJPEG connection as soon as the image is removed.
 const src = computed(() =>
-  open.value && props.printer.online && !blocked.value
+  open.value && visible.value && props.printer.online && !blocked.value
     ? `/api/printers/${encodeURIComponent(props.printer.id)}/camera?a=${attempt.value}`
     : '',
 )
@@ -98,11 +106,13 @@ function onKey(e: KeyboardEvent) {
 
 document.addEventListener('fullscreenchange', onFullscreenChange)
 document.addEventListener('keydown', onKey)
+document.addEventListener('visibilitychange', onVisibilityChange)
 
 onBeforeUnmount(() => {
   clearTimeout(retry)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   document.removeEventListener('keydown', onKey)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
 })
 </script>
 

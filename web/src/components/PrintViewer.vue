@@ -21,6 +21,8 @@ let abort: AbortController | null = null
 const loading = ref(false)
 const loadError = ref('')
 const lines = ref(false)
+const noWebGL = ref(false)
+const contextLost = ref(false)
 
 const colorMode = ref<ColorMode>('filament')
 const manual = ref(false)
@@ -96,6 +98,9 @@ function bedSize(model: string): [number, number] {
 }
 
 async function load() {
+  if (noWebGL.value) {
+    return // nothing could show it
+  }
   const g = props.printer.geometry
   if (g.state !== 'ready' || !g.key) {
     abort?.abort()
@@ -143,7 +148,13 @@ function goLive() {
 }
 
 onMounted(() => {
-  scene = new PrintScene(container.value!)
+  try {
+    scene = new PrintScene(container.value!)
+  } catch {
+    noWebGL.value = true
+    return
+  }
+  scene.onContextChange = (lost) => (contextLost.value = lost)
   scene.setBed(...bedSize(props.printer.model))
   scene.setColorMode(colorMode.value)
   load()
@@ -165,7 +176,9 @@ watch(colorMode, (m) => scene?.setColorMode(m))
 <template>
   <div class="print-viewer">
     <div ref="container" class="canvas" v-loading="loading">
-      <div v-if="loadError" class="overlay">{{ t('viewer.loadFailed', { msg: loadError }) }}</div>
+      <div v-if="noWebGL" class="overlay">{{ t('viewer.noWebGL') }}</div>
+      <div v-else-if="contextLost" class="overlay">{{ t('viewer.contextLost') }}</div>
+      <div v-else-if="loadError" class="overlay">{{ t('viewer.loadFailed', { msg: loadError }) }}</div>
     </div>
     <div v-if="geometry" class="toolbar">
       <div class="layer">

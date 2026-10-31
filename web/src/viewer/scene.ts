@@ -183,12 +183,24 @@ export class PrintScene {
   private resizeObserver: ResizeObserver
   private frame = 0
   lines = false
+  // Called when the browser takes the WebGL context away (true), e.g. after
+  // a GPU reset or with too many contexts, and when it gives it back (false).
+  onContextChange?: (lost: boolean) => void
 
+  // The constructor throws when the browser has no WebGL.
   constructor(private container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     this.renderer.setClearColor(0x000000, 0)
     container.appendChild(this.renderer.domElement)
+    // Three.js asks for the context back and recreates its GPU resources
+    // when it returns; the scene only has to be drawn again.
+    const canvas = this.renderer.domElement
+    canvas.addEventListener('webglcontextlost', () => this.onContextChange?.(true))
+    canvas.addEventListener('webglcontextrestored', () => {
+      this.onContextChange?.(false)
+      this.render()
+    })
     this.root.rotation.x = -Math.PI / 2
     this.scene.add(this.root)
     this.controls = new OrbitControls(this.camera, this.renderer.domElement)
@@ -294,7 +306,11 @@ export class PrintScene {
     this.controls.dispose()
     this.clearGeometry()
     this.setBedNone()
+    this.onContextChange = undefined
     this.renderer.dispose()
+    // Frees the context at once instead of when the canvas is garbage
+    // collected; browsers keep only a few, dropping the oldest.
+    this.renderer.forceContextLoss()
     this.renderer.domElement.remove()
   }
 

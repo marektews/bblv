@@ -89,7 +89,7 @@ Stan (przygotowanie/druk/pauza/koniec/błąd), %, warstwa X/Y, pozostały czas +
 |---|---|---|
 | GET | `/api/printers` | lista drukarek + skrócony stan |
 | GET | `/api/printers/{id}/state` | pełny stan |
-| GET | `/api/events` | SSE: zdarzenie `printer` z pełnym opisem drukarki (`id`, `name`, `model`, `experimental`, `online`, `status`, `geometry`) — po połączeniu dla każdej drukarki, potem przy każdej zmianie; nowy `geometry.key` = przeładuj geometrię |
+| GET | `/api/events` | SSE: po połączeniu `version` (wersja serwera; inna niż przy poprzednim połączeniu = strona się przeładowuje, w ustawieniach pokazuje pasek), potem zdarzenie `printer` z pełnym opisem drukarki (`id`, `name`, `model`, `experimental`, `online`, `status`, `geometry`) — po połączeniu dla każdej drukarki, potem przy każdej zmianie; nowy `geometry.key` = przeładuj geometrię; `ready` z listą id po drukarkach wysłanych przy połączeniu; `removed` z id usuniętej. Klient, który nie nadąża (64 zdarzenia), jest rozłączany i łączy się ponownie |
 | GET | `/api/printers/{id}/geometry` | geometria binarna (z cache), gzip, `ETag` = `geometry.key` |
 | GET | `/api/printers/{id}/thumbnail` | miniatura z `.3mf` |
 | GET | `/api/printers/{id}/camera` | MJPEG (`multipart/x-mixed-replace`); `camera: true` w opisie drukarki, gdy dostępna |
@@ -104,7 +104,9 @@ Stan (przygotowanie/druk/pauza/koniec/błąd), %, warstwa X/Y, pozostały czas +
 
 Stany `geometry.state`: `none`, `loading`, `ready`, `missing` (brak plików na karcie → upload), `error`. Przy `missing`/`error` w trakcie wydruku serwer ponawia pobranie co 30 s (max 10 razy) — drukarka może jeszcze pobierać plik.
 
-Frontend wbudowany przez `go:embed` (Vite buduje do `internal/webui/dist/`; bez zbudowanego frontendu serwer pokazuje stronę zastępczą). W trybie dev serwer Vite proxy'uje `/api` do Go.
+Frontend wbudowany przez `go:embed` (Vite buduje do `internal/webui/dist/`; bez zbudowanego frontendu serwer pokazuje stronę zastępczą). W trybie dev serwer Vite proxy'uje `/api` do Go. Nieistniejące ścieżki dostają `index.html` (router w przeglądarce), z wyjątkiem `assets/*`, które dają 404 — plik starego builda ma się nie wczytać, a strona wtedy przeładowuje się (najwyżej raz na minutę).
+
+Widok 3D: bez WebGL komunikat zamiast sceny; przy utracie kontekstu komunikat, po odzyskaniu scena rysuje się od nowa; przy wyjściu z widoku kontekst jest zwalniany od razu (`forceContextLoss`). Kamera nie strumieniuje w karcie w tle (`visibilitychange`).
 
 `bblv serve -replay nagranie.jsonl [-replay-model plik.3mf] [-speed N]` — wirtualna drukarka `replay` z nagrania, do pracy nad frontendem bez drukarki.
 
