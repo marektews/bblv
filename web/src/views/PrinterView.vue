@@ -46,7 +46,7 @@ const printer = computed(() => printers.value.find((p) => p.id === props.id))
         <el-tag type="warning" size="small"><fa-icon icon="flask" class="ic" />{{ t('printer.experimental') }}</el-tag>
       </el-tooltip>
     </div>
-    <el-alert v-if="!printer.online" type="warning" :closable="false" show-icon class="offline-note" :title="t('printer.offline')" />
+    <el-alert v-if="!printer.online" type="warning" :closable="false" show-icon class="offline-note" :title="t('printer.offline')" :description="printer.connectionError" />
     <div class="layout" :class="{ offline: !printer.online }">
       <section class="main">
         <GeometryNotice :printer="printer" />

@@ -107,6 +107,8 @@ export interface PrinterInfo {
   // rtsp-unreachable or stream; cameraDetail is the server's message.
   cameraError?: string
   cameraDetail?: string
+  // Why an offline printer cannot be reached, e.g. a certificate that is not its own.
+  connectionError?: string
   status: Status
   geometry: Geometry
 }

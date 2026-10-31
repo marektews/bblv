@@ -38,6 +38,7 @@ func serviceConfig(o serveOptions) *service.Config {
 		Description: "Live view of Bambu Lab 3D printers in the browser.",
 		Arguments:   args,
 		Option:      service.KeyValue{"OnFailure": "restart"},
+		UserName:    o.user, // systemd User=
 	}
 }
 
@@ -76,6 +77,11 @@ func runServiceCommand(args []string) error {
 		fmt.Println(map[service.Status]string{service.StatusRunning: "running", service.StatusStopped: "stopped"}[st])
 		return nil
 	case "install", "uninstall", "start", "stop", "restart":
+		if action == "install" && o.user != "" {
+			if err = giveDataDir(o.dataDir, o.user); err != nil {
+				return fmt.Errorf("data directory for %s: %w", o.user, err)
+			}
+		}
 		if err = service.Control(s, action); err != nil {
 			return fmt.Errorf("%w (administrator or root rights are needed)", err)
 		}

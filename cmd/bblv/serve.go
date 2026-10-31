@@ -25,12 +25,14 @@ import (
 	"github.com/marektews/bblv/internal/printjob"
 	"github.com/marektews/bblv/internal/relocate"
 	"github.com/marektews/bblv/internal/server"
+	"github.com/marektews/bblv/internal/trust"
 )
 
 type serveOptions struct {
 	dataDir     string
 	listen      string
 	allowHosts  string // comma-separated
+	user        string // with service install: the account the service runs as
 	replay      string
 	replayModel string
 	speed       float64
@@ -41,6 +43,7 @@ func parseServeFlags(args []string) serveOptions {
 	var o serveOptions
 	fs.StringVar(&o.dataDir, "data", config.DefaultDataDir(), "data directory")
 	fs.StringVar(&o.listen, "listen", ":8080", "HTTP listen address")
+	fs.StringVar(&o.user, "user", "", "with bblv service install on Linux: the account the service runs as instead of root; it becomes the owner of the data directory")
 	fs.StringVar(&o.allowHosts, "allow-host", "", "comma-separated host names, besides addresses and local names, under which the web interface may be opened, e.g. that of a reverse proxy")
 	fs.StringVar(&o.replay, "replay", "", "serve a virtual printer replaying this recording instead of the configured printers")
 	fs.StringVar(&o.replayModel, "replay-model", "", "with -replay: .gcode or .3mf file used as the geometry")
@@ -85,6 +88,13 @@ func serve(ctx context.Context, o serveOptions) error {
 	}
 	ffmpeg, _ := exec.LookPath("ffmpeg")
 	mon := monitor.New(store, ffmpeg)
+	// The CAs of the printers, learned on their first connection; the
+	// printers are pinned to them.
+	cas, err := trust.Load(filepath.Join(o.dataDir, "printer-ca.pem"))
+	if err != nil {
+		slog.Warn("printer CAs not loaded, learning them again", "err", err)
+	}
+	mon.TrustPrinters(cas)
 	if err = mon.KeepFilamentNames(filepath.Join(o.dataDir, "filaments.json")); err != nil {
 		slog.Warn("filament names not loaded", "err", err)
 	}
@@ -118,7 +128,7 @@ func serve(ctx context.Context, o serveOptions) error {
 	disc := discovery.Listen(ctx)
 	if o.replay == "" {
 		// Follows printers that got another address from DHCP.
-		go relocate.New(cfgStore, mon, disc, filepath.Join(o.dataDir, "printer-ca.pem")).Run(ctx)
+		go relocate.New(cfgStore, mon, disc, cas).Run(ctx)
 	}
 
 	srv := &http.Server{

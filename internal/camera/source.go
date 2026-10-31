@@ -50,17 +50,17 @@ func Code(err error) string {
 
 // Port6000 streams the camera of A1 and P1 printers: TLS on port 6000, an
 // 80 byte login packet, then frames of a 16 byte header and a JPEG image.
-func Port6000(host, accessCode string) Source {
+// tlsConfig checks the printer's certificate, which is the one of MQTT.
+func Port6000(host, accessCode string, tlsConfig *tls.Config) Source {
 	return func(ctx context.Context, frame func([]byte)) error {
-		return stream6000(ctx, net.JoinHostPort(host, "6000"), accessCode, frame)
+		return stream6000(ctx, net.JoinHostPort(host, "6000"), accessCode, tlsConfig, frame)
 	}
 }
 
-func stream6000(ctx context.Context, addr, accessCode string, frame func([]byte)) error {
+func stream6000(ctx context.Context, addr, accessCode string, tlsConfig *tls.Config, frame func([]byte)) error {
 	d := tls.Dialer{
 		NetDialer: &net.Dialer{Timeout: 10 * time.Second},
-		// Same private Bambu CA as MQTT.
-		Config: &tls.Config{InsecureSkipVerify: true},
+		Config:    tlsConfig,
 	}
 	conn, err := d.DialContext(ctx, "tcp", addr)
 	if err != nil {

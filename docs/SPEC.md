@@ -114,7 +114,10 @@ Widok 3D: bez WebGL komunikat zamiast sceny; przy utracie kontekstu komunikat, p
 - Praca w sieci lokalnej; dostęp zdalny przez własny VPN.
 - Jedno opcjonalne wspólne hasło (hash bcrypt). Puste hasło = otwarty dostęp do wszystkiego, łącznie z konfiguracją.
   - Sesja: ciasteczko `HttpOnly`, `SameSite=Strict`, ważne 30 dni, podpisane HMAC sekretem z `config.json`; zmiana hasła zmienia sekret (wylogowuje inne sesje, bieżąca dostaje nowe ciasteczko).
-  - Błędne hasło: odpowiedź opóźniona o 1 s.
+  - Błędne hasło wstrzymuje kolejne próby wszystkich klientów: 1 s, 2, 4… do 30 s (429 + `Retry-After`); hasło sprawdzane jest jedno naraz.
+  - Wylogowanie unieważnia sesję także po stronie serwera: hash ciasteczka i jego ważność w `config.json` (`revoked_sessions`), do jej wygaśnięcia; nowe hasło czyści listę.
+- Certyfikaty drukarek (MQTT, FTPS, kamera 6000; nie RTSP przez ffmpeg): CN = numer seryjny i podpis CA, do którego drukarka jest przypięta (`internal/trust`, `printer-ca.pem` z nagłówkiem `Printers:`). Przy pierwszym połączeniu CA z łańcucha jest poznawane i drukarka przypinana (TOFU). Daty ważności nie są sprawdzane (łańcuch weryfikowany na dzień wystawienia certyfikatu drukarki) — BBL CA wygasa w 2032, przed certyfikatami drukarek. Powód odrzucenia trafia do `connectionError` i widoku drukarki offline.
+- Linux: `bblv service install -user <konto>` (systemd `User=`) zamiast roota; właścicielem katalogu danych zostaje to konto.
   - Zmiany (POST/PUT/DELETE) z nagłówkiem `Origin` innej strony są odrzucane; endpointy JSON wymagają `Content-Type: application/json` — bez hasła chroni to przed formularzami z obcych stron.
   - Otwarte strumienie (SSE, kamera) co 15 s sprawdzają sesję; zmiana hasła je kończy.
 - Nagłówek `Host` musi być adresem IP, nazwą bez kropek (`localhost`, nazwa komputera), nazwą lokalną (`.local`, `.lan`, `.home.arpa`, `.internal`, `.localhost`) albo nazwą z `-allow-host`; inaczej 421. Chroni przed DNS rebinding (strona obcej domeny po przepięciu DNS na adres bblv).

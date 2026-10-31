@@ -20,6 +20,7 @@ import (
 	"github.com/marektews/bblv/internal/printer"
 	"github.com/marektews/bblv/internal/printjob"
 	"github.com/marektews/bblv/internal/recording"
+	"github.com/marektews/bblv/internal/trust"
 )
 
 // Geometry states.
@@ -57,16 +58,18 @@ func ready(res *printjob.Result) Geometry {
 
 // Info is the public view of a printer.
 type Info struct {
-	ID           string         `json:"id"`
-	Name         string         `json:"name"`
-	Model        string         `json:"model"`
-	Experimental bool           `json:"experimental"`
-	Online       bool           `json:"online"`
-	Camera       bool           `json:"camera"`
-	CameraError  string         `json:"cameraError,omitempty"`  // camera.Code of why the camera does not work
-	CameraDetail string         `json:"cameraDetail,omitempty"` // the error message
-	Status       printer.Status `json:"status"`
-	Geometry     Geometry       `json:"geometry"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Model        string `json:"model"`
+	Experimental bool   `json:"experimental"`
+	Online       bool   `json:"online"`
+	Camera       bool   `json:"camera"`
+	CameraError  string `json:"cameraError,omitempty"`  // camera.Code of why the camera does not work
+	CameraDetail string `json:"cameraDetail,omitempty"` // the error message
+	// ConnectionError tells why an offline printer cannot be reached.
+	ConnectionError string         `json:"connectionError,omitempty"`
+	Status          printer.Status `json:"status"`
+	Geometry        Geometry       `json:"geometry"`
 }
 
 // Event is sent to subscribers: Type "printer" carries the current info of
@@ -81,6 +84,7 @@ type Monitor struct {
 	store     *cache.Cache
 	ffmpeg    string
 	filaments filamentNames
+	trust     *trust.Store // checks the printers' certificates; nil accepts any
 
 	mu       sync.Mutex
 	ctx      context.Context // set by Run; printers added later start at once
@@ -97,6 +101,12 @@ func New(store *cache.Cache, ffmpeg string) *Monitor {
 		store.KeepInUse(m.geometryKeys)
 	}
 	return m
+}
+
+// TrustPrinters makes the connections to the printers check their
+// certificates against cas. It has to be called before printers are added.
+func (m *Monitor) TrustPrinters(cas *trust.Store) {
+	m.trust = cas
 }
 
 // geometryKeys returns the cache keys of the geometry the printers show,
@@ -220,11 +230,13 @@ func (m *Monitor) applyLocked(old *Printer, cfg config.Printer) *Printer {
 // networkPrinter creates a printer reached over the network. A printer
 // replacing another takes over its camera hub, switched to the new source.
 func (m *Monitor) networkPrinter(cfg config.Printer, hub *camera.Hub) *Printer {
-	p := newPrinter(m, cfg.ID, cfg.Name, cfg.Model, &mqttSource{cfg: cfg})
+	mqtt := &mqttSource{cfg: cfg, cas: m.trust}
+	p := newPrinter(m, cfg.ID, cfg.Name, cfg.Model, mqtt)
+	mqtt.failed = p.onConnectError
 	p.fetcher = p.fetchFTPS
 	p.cfg = cfg
 	p.rtsp = rtspCamera(cfg.Model)
-	src := camera.Port6000(cfg.Host, cfg.AccessCode)
+	src := camera.Port6000(cfg.Host, cfg.AccessCode, m.trust.TLS(cfg.Serial))
 	if p.rtsp {
 		src = camera.FFmpeg(m.ffmpeg, cfg.Host, cfg.AccessCode, p.reportedRTSP)
 	}

@@ -96,6 +96,12 @@ printer that cannot be reached is reported when it happens and then once an
 hour. Stopping the service lets requests in progress finish and disconnects
 the printers, which also ends ffmpeg processes of the cameras.
 
+On Linux, `-user bblv` (with `install`) runs the service as that account
+instead of root and makes it the owner of the data directory; create the
+account first, e.g. `useradd --system bblv`. The RTSP cameras get the access
+code on the ffmpeg command line, which then only root and that account can
+see. A Windows service runs as LocalSystem.
+
 ## Configuration
 
 Open **Settings** in the web UI.
@@ -115,7 +121,20 @@ Open **Settings** in the web UI.
    upload then.
 3. **Password** (optional): without one, everyone in your network can view
    and change everything. For access from outside, use a VPN rather than
-   exposing bblv to the internet.
+   exposing bblv to the internet. After a wrong password further attempts,
+   from any browser, wait 1 s, then 2, 4… up to 30 s. Logging out ends the
+   session also for a copy of its cookie; changing the password ends all
+   other sessions.
+
+bblv recognises a printer by its certificate, on MQTT, FTPS and the camera
+port 6000 alike: it names the printer's serial number and is signed by a
+Bambu Lab CA. On a printer's first connection bblv learns that CA and pins
+the printer to it in `printer-ca.pem`; later connections with a certificate
+from another CA are refused, so a device taking over the printer's address
+gets no access code. The view of the printer then says why it is offline.
+If the certificates change for real, e.g. with new firmware, delete
+`printer-ca.pem` and restart bblv. Expiry dates are not checked: the CA of
+the A1 expires in 2032, before the certificates it signed.
 
 The printer table shows whether each printer is connected and has an SD
 card. It can be sorted by name, IP address or serial number; the browser
@@ -141,11 +160,9 @@ minutes. An address edited in **Settings** in the meantime is not
 overwritten.
 
 A printer is trusted at a new address only when its certificate is also
-signed by a Bambu Lab CA certificate learned from the printers at their
-configured addresses (kept in `printer-ca.pem` in the data directory), so
+signed by the CA it is pinned to (see [Configuration](#configuration)), so
 no other device can obtain the access code by claiming a serial number.
-Until the CA that signed a printer's certificate has been learned this way,
-that printer is not followed. For a printer configured by host name rather
+Until a printer has connected once, it is not followed. For a printer configured by host name rather
 than an IPv4 address, only the announced address is checked, not the
 subnet.
 

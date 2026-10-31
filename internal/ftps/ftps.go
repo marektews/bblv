@@ -27,20 +27,21 @@ type Conn struct {
 	stop func() bool // stops watching the context
 }
 
-// Dial connects to the printer on port 990 and logs in as bblp. When ctx
+// Dial connects to the printer on port 990 and logs in as bblp; verify,
+// unless nil, checks the printer's certificate. When ctx
 // ends, every connection of the session is closed, which interrupts a
 // transfer in progress.
-func Dial(ctx context.Context, host, accessCode string) (*Conn, error) {
-	return dial(ctx, net.JoinHostPort(host, "990"), host, accessCode, idleTimeout)
+func Dial(ctx context.Context, host, accessCode string, verify func(tls.ConnectionState) error) (*Conn, error) {
+	return dial(ctx, net.JoinHostPort(host, "990"), host, accessCode, verify, idleTimeout)
 }
 
-func dial(ctx context.Context, addr, host, accessCode string, idle time.Duration) (*Conn, error) {
+func dial(ctx context.Context, addr, host, accessCode string, verify func(tls.ConnectionState) error, idle time.Duration) (*Conn, error) {
 	// Same private Bambu CA as MQTT; the session cache lets data connections
 	// resume the control connection's TLS session, which the X2D and P2S
 	// require ("522 SSL connection failed: session reuse required"). Sessions
 	// are cached under ServerName, or under host:port when it is empty, and
 	// every data connection uses another port.
-	tc := &tls.Config{InsecureSkipVerify: true, ServerName: host, ClientSessionCache: tls.NewLRUClientSessionCache(0)}
+	tc := &tls.Config{InsecureSkipVerify: true, VerifyConnection: verify, ServerName: host, ClientSessionCache: tls.NewLRUClientSessionCache(0)}
 	s := &session{ctx: ctx, idle: idle}
 	stop := context.AfterFunc(ctx, s.closeAll)
 	// The dial function serves the control and the data connections. Like

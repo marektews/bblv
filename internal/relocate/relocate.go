@@ -28,6 +28,7 @@ import (
 	"github.com/marektews/bblv/internal/config"
 	"github.com/marektews/bblv/internal/discovery"
 	"github.com/marektews/bblv/internal/monitor"
+	"github.com/marektews/bblv/internal/trust"
 )
 
 const (
@@ -61,7 +62,7 @@ type Relocator struct {
 	cfg   ConfigStore
 	mon   Printers
 	disc  Announcements // nil without discovery
-	trust *trust
+	cas   *trust.Store
 	probe func(ctx context.Context, host string) []*x509.Certificate
 
 	learned  map[string]bool      // printers whose CA was taken in this run, by ID
@@ -69,14 +70,14 @@ type Relocator struct {
 	searched map[string]time.Time // last search for a printer, by ID
 }
 
-// New creates a relocator keeping the CA certificates in trustFile.
-func New(cfg ConfigStore, mon Printers, disc Announcements, trustFile string) *Relocator {
-	t, err := loadTrust(trustFile)
-	if err != nil {
-		slog.Warn("printer CA certificates not loaded", "file", trustFile, "err", err)
+// New creates a relocator that recognises printers by their certificates,
+// checked against the CAs in cas; nil keeps them only in memory.
+func New(cfg ConfigStore, mon Printers, disc Announcements, cas *trust.Store) *Relocator {
+	if cas == nil {
+		cas = &trust.Store{}
 	}
 	return &Relocator{
-		cfg: cfg, mon: mon, disc: disc, trust: t, probe: certificates,
+		cfg: cfg, mon: mon, disc: disc, cas: cas, probe: certificates,
 		learned: map[string]bool{}, offline: map[string]time.Time{}, searched: map[string]time.Time{},
 	}
 }
@@ -122,22 +123,17 @@ func (r *Relocator) check(ctx context.Context, now time.Time) {
 	}
 }
 
-// learn takes the CA certificates of a printer working at its configured
-// address. It tells whether the printer answered; if not, e.g. after a
-// timeout, it is asked again at the next check.
+// learn makes sure the CA of a printer working at its configured address is
+// known; the printer's own connections usually learn it first. It tells
+// whether the printer answered; if not, e.g. after a timeout, it is asked
+// again at the next check.
 func (r *Relocator) learn(ctx context.Context, p config.Printer) bool {
 	chain := r.probe(ctx, p.Host)
-	switch {
-	case chain == nil:
+	if chain == nil {
 		return false
-	case len(chain) < 2:
-		slog.Warn("printer certificate comes without its CA", "printer", p.ID, "host", p.Host)
-	case !strings.EqualFold(chain[0].Subject.CommonName, p.Serial):
-		slog.Warn("printer certificate names another serial number", "printer", p.ID, "host", p.Host)
-	default:
-		if err := r.trust.add(chain); err != nil {
-			slog.Warn("printer CA certificates not saved", "file", r.trust.path, "err", err)
-		}
+	}
+	if err := r.cas.Check(chain, p.Serial); err != nil {
+		slog.Warn("printer certificate not trusted", "printer", p.ID, "host", p.Host, "err", err)
 	}
 	return true
 }
@@ -157,7 +153,7 @@ func (r *Relocator) search(ctx context.Context, lost []config.Printer, now time.
 		r.searched[p.ID] = now
 		if host := announced[strings.ToUpper(p.Serial)]; host != "" && host != p.Host {
 			candidates[host] = r.probe(ctx, host)
-			if r.trust.verify(candidates[host], p.Serial) {
+			if r.cas.Verify(candidates[host], p.Serial) {
 				continue
 			}
 		}
@@ -180,12 +176,12 @@ func (r *Relocator) search(ctx context.Context, lost []config.Printer, now time.
 func (r *Relocator) find(candidates map[string][]*x509.Certificate, p config.Printer) string {
 	for _, host := range slices.Sorted(maps.Keys(candidates)) {
 		chain := candidates[host]
-		if r.trust.verify(chain, p.Serial) {
+		if r.cas.Verify(chain, p.Serial) {
 			return host
 		}
 		if len(chain) > 0 && strings.EqualFold(chain[0].Subject.CommonName, p.Serial) {
 			slog.Warn("a device claims a printer's serial number without a certificate of a known printer CA",
-				"printer", p.ID, "host", host, "known CAs", len(r.trust.certs))
+				"printer", p.ID, "host", host, "known CAs", r.cas.Count())
 		}
 	}
 	return ""

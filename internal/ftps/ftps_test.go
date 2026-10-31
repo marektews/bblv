@@ -43,7 +43,7 @@ func silentServer(t *testing.T) string {
 func TestStalledSessionTimesOut(t *testing.T) {
 	addr := silentServer(t)
 	start := time.Now()
-	if _, err := dial(context.Background(), addr, "127.0.0.1", "code", 100*time.Millisecond); err == nil {
+	if _, err := dial(context.Background(), addr, "127.0.0.1", "code", nil, 100*time.Millisecond); err == nil {
 		t.Fatal("dial succeeded")
 	}
 	if d := time.Since(start); d > 5*time.Second {
@@ -56,7 +56,7 @@ func TestCancelInterruptsSession(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	time.AfterFunc(100*time.Millisecond, cancel)
 	start := time.Now()
-	if _, err := dial(ctx, addr, "127.0.0.1", "code", time.Hour); err == nil {
+	if _, err := dial(ctx, addr, "127.0.0.1", "code", nil, time.Hour); err == nil {
 		t.Fatal("dial succeeded")
 	}
 	if d := time.Since(start); d > 5*time.Second {

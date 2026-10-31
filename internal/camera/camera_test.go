@@ -79,7 +79,7 @@ func TestStream6000(t *testing.T) {
 	}()
 
 	var frames [][]byte
-	err = stream6000(context.Background(), ln.Addr().String(), "12345678", func(f []byte) { frames = append(frames, f) })
+	err = stream6000(context.Background(), ln.Addr().String(), "12345678", &tls.Config{InsecureSkipVerify: true}, func(f []byte) { frames = append(frames, f) })
 	if err == nil {
 		t.Fatal("expected an error when the server closes the stream")
 	}
@@ -111,7 +111,7 @@ func TestStream6000Refused(t *testing.T) {
 		conn.Write(append(head, 0xff, 0xff, 0xff, 0xff, 0, 0, 0, 0))
 	}()
 
-	err = stream6000(context.Background(), ln.Addr().String(), "12345678", func([]byte) { t.Error("unexpected frame") })
+	err = stream6000(context.Background(), ln.Addr().String(), "12345678", &tls.Config{InsecureSkipVerify: true}, func([]byte) { t.Error("unexpected frame") })
 	if err == nil || !strings.Contains(err.Error(), "refused the stream (status -1)") {
 		t.Fatalf("err = %v", err)
 	}

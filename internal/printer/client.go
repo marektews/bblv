@@ -4,7 +4,6 @@ package printer
 import (
 	"context"
 	"crypto/rand"
-	"crypto/tls"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -16,6 +15,7 @@ import (
 	"github.com/eclipse/paho.mqtt.golang/packets"
 
 	"github.com/marektews/bblv/internal/config"
+	"github.com/marektews/bblv/internal/trust"
 )
 
 const (
@@ -38,9 +38,10 @@ type Client struct {
 	state        *State
 }
 
-// New creates a client. handler is called for every report after it has been
+// New creates a client checking the printer's certificate against cas, any
+// certificate when nil. handler is called for every report after it has been
 // merged into the state; calls are sequential and must not block for long.
-func New(p config.Printer, handler func(Report)) *Client {
+func New(p config.Printer, cas *trust.Store, handler func(Report)) *Client {
 	c := &Client{p: p, handler: handler, state: NewState()}
 	opts := mqtt.NewClientOptions().
 		AddBroker("ssl://" + net.JoinHostPort(p.Host, "8883")). // brackets an IPv6 address
@@ -48,8 +49,8 @@ func New(p config.Printer, handler func(Report)) *Client {
 		SetUsername("bblp").
 		SetPassword(p.AccessCode).
 		// The printer presents a certificate issued by Bambu's private CA for
-		// its serial number, so there is no public chain to verify against.
-		SetTLSConfig(&tls.Config{InsecureSkipVerify: true}).
+		// its serial number; cas knows the CA after the first connection.
+		SetTLSConfig(cas.TLS(p.Serial)).
 		SetKeepAlive(30 * time.Second).
 		SetAutoReconnect(true).
 		SetMaxReconnectInterval(30 * time.Second).

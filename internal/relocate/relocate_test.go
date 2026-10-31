@@ -17,6 +17,7 @@ import (
 	"github.com/marektews/bblv/internal/config"
 	"github.com/marektews/bblv/internal/discovery"
 	"github.com/marektews/bblv/internal/monitor"
+	"github.com/marektews/bblv/internal/trust"
 )
 
 func certificate(t *testing.T, cn string, ca bool, parent *x509.Certificate, parentKey *ecdsa.PrivateKey) (*x509.Certificate, *ecdsa.PrivateKey) {
@@ -86,7 +87,11 @@ func TestRelocatesAPrinterOnlyToItsCertificate(t *testing.T) {
 	trustFile := filepath.Join(t.TempDir(), "printer-ca.pem")
 	cfg := &fakeConfig{c: config.Config{Printers: []config.Printer{{ID: "a1", Host: "10.0.0.5", Serial: testSerial}}}}
 	mon := &fakeMonitor{online: map[string]bool{"a1": true}}
-	r := New(cfg, mon, nil, trustFile)
+	cas, err := trust.Load(trustFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := New(cfg, mon, nil, cas)
 	r.probe = func(_ context.Context, host string) []*x509.Certificate {
 		probes.Add(1)
 		return chains[host]
@@ -99,8 +104,8 @@ func TestRelocatesAPrinterOnlyToItsCertificate(t *testing.T) {
 	r.check(context.Background(), t0.Add(-checkEvery))
 	chains = saved
 	r.check(context.Background(), t0)
-	if len(r.trust.certs) != 1 || probes.Load() != 2 {
-		t.Fatalf("learned %d CAs with %d probes, want the printer's CA from the second probe", len(r.trust.certs), probes.Load())
+	if r.cas.Count() != 1 || probes.Load() != 2 {
+		t.Fatalf("learned %d CAs with %d probes, want the printer's CA from the second probe", r.cas.Count(), probes.Load())
 	}
 	r.check(context.Background(), t0)
 	if probes.Load() != 2 {
@@ -135,9 +140,9 @@ func TestRelocatesAPrinterOnlyToItsCertificate(t *testing.T) {
 	}
 
 	// The CA survives a restart.
-	loaded, err := loadTrust(trustFile)
-	if err != nil || !loaded.verify([]*x509.Certificate{printerCert, ca}, testSerial) || loaded.verify([]*x509.Certificate{rogue}, testSerial) {
-		t.Fatalf("loaded trust: %d CAs, %v", len(loaded.certs), err)
+	loaded, err := trust.Load(trustFile)
+	if err != nil || !loaded.Verify([]*x509.Certificate{printerCert, ca}, testSerial) || loaded.Verify([]*x509.Certificate{rogue}, testSerial) {
+		t.Fatalf("loaded trust: %d CAs, %v", loaded.Count(), err)
 	}
 }
 
@@ -146,8 +151,11 @@ func TestRelocatesToTheAnnouncedAddress(t *testing.T) {
 	printerCert, _ := certificate(t, testSerial, false, ca, caKey)
 	cfg := &fakeConfig{c: config.Config{Printers: []config.Printer{{ID: "a1", Host: "10.0.0.5", Serial: testSerial}}}}
 	mon := &fakeMonitor{online: map[string]bool{"a1": false}}
-	r := New(cfg, mon, fakeAnnouncements{{Serial: testSerial, Host: "10.1.0.20"}}, "")
-	r.trust.certs = []*x509.Certificate{ca}
+	cas := &trust.Store{}
+	if err := cas.Check([]*x509.Certificate{printerCert, ca}, testSerial); err != nil {
+		t.Fatal(err)
+	}
+	r := New(cfg, mon, fakeAnnouncements{{Serial: testSerial, Host: "10.1.0.20"}}, cas)
 	var mu sync.Mutex
 	var probed []string
 	r.probe = func(_ context.Context, host string) []*x509.Certificate {

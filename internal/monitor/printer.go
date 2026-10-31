@@ -16,6 +16,7 @@ import (
 	"github.com/marektews/bblv/internal/printer"
 	"github.com/marektews/bblv/internal/printjob"
 	"github.com/marektews/bblv/internal/recording"
+	"github.com/marektews/bblv/internal/trust"
 )
 
 const (
@@ -44,6 +45,7 @@ type Printer struct {
 
 	mu          sync.Mutex
 	online      bool
+	connErr     string // why the last connection attempt failed
 	status      printer.Status
 	geom        Geometry
 	job         string // print the geometry belongs to
@@ -118,6 +120,9 @@ func (p *Printer) infoLocked() Info {
 		ID: p.id, Name: p.name, Model: p.model, Experimental: experimental,
 		Online: p.online, Camera: p.camera != nil, Status: p.status, Geometry: p.geom,
 	}
+	if !p.online {
+		info.ConnectionError = p.connErr
+	}
 	if err := p.cameraErrLocked(); err != nil {
 		info.CameraError, info.CameraDetail = camera.Code(err), err.Error()
 	}
@@ -148,6 +153,23 @@ func (p *Printer) reportedRTSP() string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.status.RTSPURL
+}
+
+// onConnectError keeps why connecting to the printer failed, "" once it
+// connected, which the view of an offline printer shows.
+func (p *Printer) onConnectError(err error) {
+	msg := ""
+	if err != nil {
+		msg = err.Error()
+	}
+	p.mu.Lock()
+	changed := p.connErr != msg
+	p.connErr = msg
+	info := p.infoLocked()
+	p.mu.Unlock()
+	if changed {
+		p.publish(info)
+	}
 }
 
 func (p *Printer) onConnection(ok bool) {
@@ -239,7 +261,7 @@ func (p *Printer) fetchFTPS(ctx context.Context, j job) Geometry {
 		slog.Warn("geometry fetch failed", "printer", p.id, "print", j.subtask, "err", err)
 		return Geometry{State: GeometryError, Error: err.Error()}
 	}
-	conn, err := ftps.Dial(ctx, p.cfg.Host, p.cfg.AccessCode)
+	conn, err := ftps.Dial(ctx, p.cfg.Host, p.cfg.AccessCode, p.m.trust.TLS(p.cfg.Serial).VerifyConnection)
 	if err != nil {
 		return fail(err)
 	}
@@ -282,12 +304,20 @@ type source interface {
 }
 
 type mqttSource struct {
-	cfg config.Printer
+	cfg    config.Printer
+	cas    *trust.Store
+	failed func(error) // why connecting failed, nil once connected
+}
+
+func (s *mqttSource) report(err error) {
+	if s.failed != nil {
+		s.failed(err)
+	}
 }
 
 func (s *mqttSource) run(ctx context.Context, status func(printer.Status), online func(bool)) {
 	var c *printer.Client
-	c = printer.New(s.cfg, func(printer.Report) { status(c.Status()) })
+	c = printer.New(s.cfg, s.cas, func(printer.Report) { status(c.Status()) })
 	c.OnConnection(online)
 	// Also abandons a connection attempt still in progress, which would
 	// otherwise leave a session open on the printer.
@@ -295,11 +325,13 @@ func (s *mqttSource) run(ctx context.Context, status func(printer.Status), onlin
 	for attempt := 1; ; attempt++ {
 		err := c.Connect(ctx)
 		if err == nil {
+			s.report(nil)
 			break
 		}
 		if ctx.Err() != nil {
 			return
 		}
+		s.report(err)
 		// A printer switched off for the night would otherwise fill the
 		// log with a warning every 30 seconds.
 		level := slog.LevelDebug

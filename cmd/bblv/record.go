@@ -51,7 +51,7 @@ func runRecord(args []string) error {
 
 	var client *printer.Client
 	var status statusLogger
-	client = printer.New(*p, func(r printer.Report) {
+	client = printer.New(*p, nil, func(r printer.Report) {
 		if werr := rec.Write(r.Time, r.Payload); werr != nil {
 			slog.Error("write recording", "err", werr)
 		}

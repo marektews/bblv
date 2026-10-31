@@ -71,7 +71,7 @@ func runGeometry(args []string) error {
 		}
 		name, gcodeFile = s.Subtask, s.GcodeFile
 	}
-	conn, err := ftps.Dial(ctx, p.Host, p.AccessCode)
+	conn, err := ftps.Dial(ctx, p.Host, p.AccessCode, nil)
 	if err != nil {
 		return err
 	}
@@ -106,7 +106,7 @@ func runGeometry(args []string) error {
 func currentPrint(ctx context.Context, p config.Printer) (printer.Status, error) {
 	found := make(chan printer.Status, 1)
 	var c *printer.Client
-	c = printer.New(p, func(printer.Report) {
+	c = printer.New(p, nil, func(printer.Report) {
 		if s := c.Status(); s.Subtask != "" {
 			select {
 			case found <- s:
