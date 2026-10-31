@@ -48,11 +48,16 @@ func (h *Hub) Err() error {
 }
 
 // Subscribe returns a channel that always holds the newest frame not yet
-// received, and a function to unsubscribe.
+// received, and a function to unsubscribe. The channel is closed when the
+// hub is.
 func (h *Hub) Subscribe() (<-chan []byte, func()) {
 	ch := make(chan []byte, 1)
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.closed {
+		close(ch)
+		return ch, func() {}
+	}
 	h.subs[ch] = struct{}{}
 	if h.latest != nil {
 		ch <- h.latest
@@ -61,20 +66,43 @@ func (h *Hub) Subscribe() (<-chan []byte, func()) {
 		h.idle.Stop()
 		h.idle = nil
 	}
-	if h.cancel == nil && !h.closed {
-		ctx, cancel := context.WithCancel(context.Background())
-		h.cancel = cancel
-		go h.run(ctx)
+	if h.cancel == nil {
+		h.startLocked()
 	}
 	return ch, func() { h.unsubscribe(ch) }
 }
 
-// Close stops the stream for good, e.g. when the printer is removed.
+func (h *Hub) startLocked() {
+	ctx, cancel := context.WithCancel(context.Background())
+	h.cancel = cancel
+	go h.run(ctx, h.source)
+}
+
+// SetSource switches to another source, e.g. after the printer's address
+// changed. A running stream restarts at once; viewers stay subscribed.
+func (h *Hub) SetSource(source Source) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.source = source
+	h.latest = nil
+	h.err = nil
+	if h.cancel != nil && !h.closed {
+		h.cancel()
+		h.startLocked()
+	}
+}
+
+// Close stops the stream for good, e.g. when the printer is removed, and
+// closes the channels of the viewers.
 func (h *Hub) Close() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.closed = true
 	h.latest = nil
+	for ch := range h.subs {
+		close(ch)
+	}
+	clear(h.subs)
 	if h.idle != nil {
 		h.idle.Stop()
 		h.idle = nil
@@ -105,13 +133,16 @@ func (h *Hub) stopIfIdle() {
 	}
 }
 
-func (h *Hub) run(ctx context.Context) {
+// run streams from source until ctx, cancelled with the hub locked, ends.
+// Frames and errors arriving after that are dropped, so a source replaced
+// by SetSource cannot overwrite what its successor delivers.
+func (h *Hub) run(ctx context.Context, source Source) {
 	delay := h.retry
 	for {
 		streamed := false
-		err := h.source(ctx, func(img []byte) {
+		err := source(ctx, func(img []byte) {
 			streamed = true
-			h.publish(img)
+			h.publish(ctx, img)
 		})
 		if ctx.Err() != nil {
 			return
@@ -119,7 +150,7 @@ func (h *Hub) run(ctx context.Context) {
 		if streamed {
 			delay = h.retry
 		}
-		h.setErr(err)
+		h.setErr(ctx, err)
 		slog.Warn("camera stream stopped, reconnecting", "camera", h.name, "in", delay, "err", err)
 		select {
 		case <-ctx.Done():
@@ -130,8 +161,12 @@ func (h *Hub) run(ctx context.Context) {
 	}
 }
 
-func (h *Hub) publish(img []byte) {
+func (h *Hub) publish(ctx context.Context, img []byte) {
 	h.mu.Lock()
+	if ctx.Err() != nil {
+		h.mu.Unlock()
+		return
+	}
 	recovered := h.err != nil
 	h.err = nil
 	h.latest = img
@@ -149,8 +184,12 @@ func (h *Hub) publish(img []byte) {
 	}
 }
 
-func (h *Hub) setErr(err error) {
+func (h *Hub) setErr(ctx context.Context, err error) {
 	h.mu.Lock()
+	if ctx.Err() != nil {
+		h.mu.Unlock()
+		return
+	}
 	changed := (h.err == nil) != (err == nil) || (err != nil && h.err.Error() != err.Error())
 	h.err = err
 	h.mu.Unlock()

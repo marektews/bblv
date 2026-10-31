@@ -233,6 +233,50 @@ func TestHubStartsOnDemandAndStopsWhenIdle(t *testing.T) {
 	unsub()
 }
 
+// streamOf returns a source sending img once and then waiting to be stopped.
+func streamOf(img string, running *atomic.Int32) Source {
+	return func(ctx context.Context, frame func([]byte)) error {
+		running.Add(1)
+		defer running.Add(-1)
+		frame([]byte(img))
+		<-ctx.Done()
+		return ctx.Err()
+	}
+}
+
+func TestHubSetSourceKeepsViewers(t *testing.T) {
+	var running atomic.Int32
+	h := NewHub("test", streamOf("old", &running))
+	frames, unsub := h.Subscribe()
+	defer unsub()
+	if got := string(<-frames); got != "old" {
+		t.Fatalf("got %q", got)
+	}
+	h.SetSource(streamOf("new", &running))
+	if got := string(<-frames); got != "new" {
+		t.Fatalf("got %q after the source changed", got)
+	}
+	waitFor(t, func() bool { return running.Load() == 1 })
+}
+
+func TestHubCloseEndsViewers(t *testing.T) {
+	var running atomic.Int32
+	h := NewHub("test", streamOf("img", &running))
+	frames, unsub := h.Subscribe()
+	defer unsub()
+	<-frames
+	h.Close()
+	if _, ok := <-frames; ok {
+		t.Fatal("channel open after Close")
+	}
+	late, unsubLate := h.Subscribe()
+	defer unsubLate()
+	if _, ok := <-late; ok {
+		t.Fatal("subscribed to a closed hub")
+	}
+	waitFor(t, func() bool { return running.Load() == 0 })
+}
+
 func peek(h *Hub) []byte {
 	h.mu.Lock()
 	defer h.mu.Unlock()
