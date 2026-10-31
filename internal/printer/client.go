@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -42,7 +43,7 @@ type Client struct {
 func New(p config.Printer, handler func(Report)) *Client {
 	c := &Client{p: p, handler: handler, state: NewState()}
 	opts := mqtt.NewClientOptions().
-		AddBroker("ssl://" + p.Host + ":8883").
+		AddBroker("ssl://" + net.JoinHostPort(p.Host, "8883")). // brackets an IPv6 address
 		SetClientID("bblv-" + randomID()).
 		SetUsername("bblp").
 		SetPassword(p.AccessCode).

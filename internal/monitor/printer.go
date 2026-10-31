@@ -21,6 +21,9 @@ import (
 const (
 	retryInterval = 30 * time.Second
 	maxAttempts   = 10
+	// unreachableReminder: every so many failed connection attempts, an
+	// hour at retryInterval, the warning about it is repeated.
+	unreachableReminder = 120
 )
 
 // testedModels are verified on real hardware; the others are experimental.
@@ -171,7 +174,13 @@ func (p *Printer) onStatus(ctx context.Context, s printer.Status) {
 	p.mu.Unlock()
 	p.publish(info)
 	if j != nil {
-		go p.fetch(ctx, *j)
+		// Called while the printer runs, so the monitor is not yet waiting
+		// for its goroutines to end.
+		p.m.wg.Add(1)
+		go func() {
+			defer p.m.wg.Done()
+			p.fetch(ctx, *j)
+		}()
 	}
 }
 
@@ -283,7 +292,7 @@ func (s *mqttSource) run(ctx context.Context, status func(printer.Status), onlin
 	// Also abandons a connection attempt still in progress, which would
 	// otherwise leave a session open on the printer.
 	defer c.Close()
-	for {
+	for attempt := 1; ; attempt++ {
 		err := c.Connect(ctx)
 		if err == nil {
 			break
@@ -291,7 +300,13 @@ func (s *mqttSource) run(ctx context.Context, status func(printer.Status), onlin
 		if ctx.Err() != nil {
 			return
 		}
-		slog.Warn("printer unreachable, retrying", "printer", s.cfg.ID, "in", retryInterval, "err", err)
+		// A printer switched off for the night would otherwise fill the
+		// log with a warning every 30 seconds.
+		level := slog.LevelDebug
+		if attempt == 1 || attempt%unreachableReminder == 0 {
+			level = slog.LevelWarn
+		}
+		slog.Log(ctx, level, "printer unreachable, retrying", "printer", s.cfg.ID, "attempt", attempt, "in", retryInterval, "err", err)
 		select {
 		case <-ctx.Done():
 			return

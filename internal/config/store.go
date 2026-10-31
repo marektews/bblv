@@ -9,9 +9,21 @@ import (
 
 // Store keeps the configuration in memory and saves every change to disk.
 type Store struct {
-	dir string
-	mu  sync.Mutex
-	c   Config
+	dir   string
+	mu    sync.Mutex
+	c     Config
+	watch func(Config)
+}
+
+// Watch calls f with the configuration now and after every saved change, in
+// the order of the changes, so that what f keeps up to date never applies an
+// older change after a newer one. f runs with the store locked: it must be
+// quick and must not use the store.
+func (s *Store) Watch(f func(Config)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.watch = f
+	f(s.c.clone())
 }
 
 // OpenStore loads config.json from dataDir.
@@ -43,6 +55,9 @@ func (s *Store) Update(fn func(c *Config) error) error {
 		return err
 	}
 	s.c = c
+	if s.watch != nil {
+		s.watch(c.clone())
+	}
 	return nil
 }
 

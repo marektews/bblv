@@ -3,8 +3,10 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"mime"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -50,10 +52,38 @@ func (in *printerInput) normalize() error {
 	if in.Host == "" || in.Serial == "" {
 		return errors.New("host and serial number are required")
 	}
+	host, ok := validHost(in.Host)
+	if !ok {
+		return fmt.Errorf("%q is not an IP address or a host name; enter it without a port or http://", in.Host)
+	}
+	in.Host = host
 	if in.Name == "" {
 		in.Name = in.Serial
 	}
 	return nil
+}
+
+// validHost accepts an IPv4 or IPv6 address, the latter also in brackets,
+// or a host name, and returns it in the form saved.
+func validHost(h string) (string, bool) {
+	if ip := net.ParseIP(strings.TrimSuffix(strings.TrimPrefix(h, "["), "]")); ip != nil {
+		return ip.String(), true
+	}
+	h = strings.TrimSuffix(h, ".")
+	if h == "" || len(h) > 253 {
+		return "", false
+	}
+	for _, label := range strings.Split(h, ".") {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return "", false
+		}
+		for _, r := range label {
+			if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-') {
+				return "", false
+			}
+		}
+	}
+	return h, true
 }
 
 func (s *server) getConfig(w http.ResponseWriter, r *http.Request) {
@@ -94,7 +124,6 @@ func (s *server) addPrinter(w http.ResponseWriter, r *http.Request) {
 	if s.configError(w, err) {
 		return
 	}
-	s.mon.AddPrinter(p)
 	writeJSON(w, viewOf(p))
 }
 
@@ -129,7 +158,6 @@ func (s *server) updatePrinter(w http.ResponseWriter, r *http.Request) {
 	if s.configError(w, err) {
 		return
 	}
-	s.mon.ReplacePrinter(p)
 	writeJSON(w, viewOf(p))
 }
 
@@ -145,7 +173,6 @@ func (s *server) deletePrinter(w http.ResponseWriter, r *http.Request) {
 	if s.configError(w, err) {
 		return
 	}
-	s.mon.RemovePrinter(id)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -242,7 +269,6 @@ func (s *server) importCodes(w http.ResponseWriter, r *http.Request) {
 	}
 	ids := []string{}
 	for _, p := range updated {
-		s.mon.ReplacePrinter(p)
 		ids = append(ids, p.ID)
 	}
 	if missing == nil {

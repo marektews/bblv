@@ -45,8 +45,7 @@ func certificate(t *testing.T, cn string, ca bool, parent *x509.Certificate, par
 }
 
 type fakeMonitor struct {
-	online   map[string]bool
-	replaced []config.Printer
+	online map[string]bool
 }
 
 func (m *fakeMonitor) Printers() []monitor.Info {
@@ -55,11 +54,6 @@ func (m *fakeMonitor) Printers() []monitor.Info {
 		out = append(out, monitor.Info{ID: id, Online: on})
 	}
 	return out
-}
-
-func (m *fakeMonitor) ReplacePrinter(p config.Printer) error {
-	m.replaced = append(m.replaced, p)
-	return nil
 }
 
 type fakeConfig struct{ c config.Config }
@@ -124,9 +118,6 @@ func TestRelocatesAPrinterOnlyToItsCertificate(t *testing.T) {
 	r.check(context.Background(), t0.Add(3*time.Minute+time.Second))
 	if got := cfg.c.Printers[0].Host; got != "10.0.0.9" {
 		t.Fatalf("host = %s, want 10.0.0.9", got)
-	}
-	if len(mon.replaced) != 1 || mon.replaced[0].Host != "10.0.0.9" {
-		t.Fatalf("replaced = %+v", mon.replaced)
 	}
 
 	// Only the rogue device is left: nothing moves, and the search waits.

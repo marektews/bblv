@@ -9,6 +9,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
@@ -131,32 +132,79 @@ func (m *Monitor) learnFilaments(s *gcode.Settings) {
 	}
 }
 
-// AddPrinter adds a printer reached over the local network.
-func (m *Monitor) AddPrinter(cfg config.Printer) {
-	m.add(m.networkPrinter(cfg, nil))
+// SyncPrinters makes the printers reached over the network follow the
+// configured ones, in their order of appearance: it adds new printers,
+// applies changes and stops following printers no longer configured. A new
+// name is only shown; other changes reconnect the printer, which keeps the
+// geometry of the current print while the serial number stays and passes
+// its camera on, so that viewers stay connected. A replay stays as it is.
+// config.Store.Watch calls it after every change, in their order.
+func (m *Monitor) SyncPrinters(cfgs []config.Printer) {
+	var changed, retired, removed []*Printer
+	m.mu.Lock()
+	configured := map[string]bool{}
+	for _, cfg := range cfgs {
+		configured[cfg.ID] = true
+		i := m.index(cfg.ID)
+		if i < 0 {
+			p := m.networkPrinter(cfg, nil)
+			m.printers = append(m.printers, p)
+			m.startLocked(p)
+			changed = append(changed, p)
+			continue
+		}
+		old := m.printers[i]
+		switch p := m.applyLocked(old, cfg); p {
+		case nil: // unchanged
+		case old: // renamed
+			changed = append(changed, old)
+		default:
+			m.printers[i] = p
+			m.startLocked(p)
+			changed = append(changed, p)
+			retired = append(retired, old)
+		}
+	}
+	kept := m.printers[:0]
+	for _, p := range m.printers {
+		if p.cfg.ID != "" && !configured[p.id] {
+			removed = append(removed, p)
+		} else {
+			kept = append(kept, p)
+		}
+	}
+	clear(m.printers[len(kept):])
+	m.printers = kept
+	m.mu.Unlock()
+
+	for _, p := range retired {
+		p.retire()
+	}
+	for _, p := range removed {
+		p.close()
+		m.publish(Event{Type: "removed", Info: Info{ID: p.id}})
+	}
+	for _, p := range changed {
+		p.publish(p.info())
+	}
 }
 
-// ReplacePrinter applies a changed configuration to the printer with the
-// same ID, keeping its position. A new name is only shown; other changes
-// reconnect the printer. The geometry of the current print stays while the
-// serial number does, and viewers of the camera stay connected.
-func (m *Monitor) ReplacePrinter(cfg config.Printer) error {
-	m.mu.Lock()
-	i := m.index(cfg.ID)
-	if i < 0 {
-		m.mu.Unlock()
-		return ErrUnknownPrinter
+// applyLocked applies cfg to the printer old. It returns nil when nothing
+// changed, old when only the name did, or the printer replacing old.
+func (m *Monitor) applyLocked(old *Printer, cfg config.Printer) *Printer {
+	if old.cfg == cfg {
+		return nil
 	}
-	old := m.printers[i]
 	renamed := old.cfg
 	renamed.Name = cfg.Name
 	if renamed == cfg {
+		// cfg.Name is only used with the monitor locked; the other
+		// fields, read while the printer runs, stay as they are.
+		old.cfg.Name = cfg.Name
 		old.mu.Lock()
 		old.name = displayName(cfg.ID, cfg.Name)
 		old.mu.Unlock()
-		m.mu.Unlock()
-		old.publish(old.info())
-		return nil
+		return old
 	}
 	p := m.networkPrinter(cfg, old.camera)
 	if strings.EqualFold(old.cfg.Serial, cfg.Serial) {
@@ -166,28 +214,7 @@ func (m *Monitor) ReplacePrinter(cfg config.Printer) error {
 		}
 		old.mu.Unlock()
 	}
-	m.printers[i] = p
-	m.startLocked(p)
-	m.mu.Unlock()
-	old.retire()
-	m.publish(Event{Type: "printer", Info: p.info()})
-	return nil
-}
-
-// RemovePrinter stops following a printer.
-func (m *Monitor) RemovePrinter(id string) error {
-	m.mu.Lock()
-	i := m.index(id)
-	if i < 0 {
-		m.mu.Unlock()
-		return ErrUnknownPrinter
-	}
-	old := m.printers[i]
-	m.printers = append(m.printers[:i], m.printers[i+1:]...)
-	m.mu.Unlock()
-	old.close()
-	m.publish(Event{Type: "removed", Info: Info{ID: id}})
-	return nil
+	return p
 }
 
 // networkPrinter creates a printer reached over the network. A printer
@@ -269,7 +296,8 @@ func (m *Monitor) index(id string) int {
 	return -1
 }
 
-// Run follows the printers until ctx is cancelled.
+// Run follows the printers until ctx is cancelled. It returns once they are
+// disconnected, their downloads ended and their cameras stopped.
 func (m *Monitor) Run(ctx context.Context) {
 	m.mu.Lock()
 	m.ctx = ctx
@@ -278,6 +306,16 @@ func (m *Monitor) Run(ctx context.Context) {
 	}
 	m.mu.Unlock()
 	<-ctx.Done()
+	m.mu.Lock()
+	printers := slices.Clone(m.printers)
+	m.mu.Unlock()
+	// A camera runs on its own while anyone watches, an ffmpeg process for
+	// some models, which would outlive the server.
+	for _, p := range printers {
+		if p.camera != nil {
+			p.camera.Close()
+		}
+	}
 	m.wg.Wait()
 }
 

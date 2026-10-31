@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/kardianos/service"
+
+	"github.com/marektews/bblv/internal/logfile"
 )
 
 const serviceUsage = `Usage: bblv service <command> [serve flags]
@@ -95,7 +97,8 @@ func runAsService(o serveOptions) error {
 		if err := os.MkdirAll(o.dataDir, 0o700); err != nil {
 			return err
 		}
-		f, err := os.OpenFile(filepath.Join(o.dataDir, "bblv.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+		// At most 5 MB in bblv.log and as much in bblv.log.1.
+		f, err := logfile.Open(filepath.Join(o.dataDir, "bblv.log"), 5<<20)
 		if err != nil {
 			return err
 		}

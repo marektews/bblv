@@ -63,6 +63,7 @@ func setupWithConfig(t *testing.T) (*httptest.Server, *config.Store) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	cfg.Watch(func(c config.Config) { mon.SyncPrinters(c.Printers) }) // as bblv serve does
 	ts := httptest.NewServer(New(Deps{Monitor: mon, Config: cfg, Auth: auth.New(cfg), Version: "test"}))
 	t.Cleanup(ts.Close)
 	return ts, cfg

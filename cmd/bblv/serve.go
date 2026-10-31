@@ -100,18 +100,21 @@ func serve(ctx context.Context, o serveOptions) error {
 			mon.Upload("replay", res)
 		}
 	} else {
-		cfg := cfgStore.Get()
-		if len(cfg.Printers) == 0 {
+		if len(cfgStore.Get().Printers) == 0 {
 			slog.Warn("no printers configured, add them in the settings", "config", filepath.Join(o.dataDir, config.FileName))
 		}
-		for _, p := range cfg.Printers {
-			mon.AddPrinter(p)
-		}
+		// Every saved change reaches the monitor in the order of the saves,
+		// also when settings and the relocator change printers at once.
+		cfgStore.Watch(func(c config.Config) { mon.SyncPrinters(c.Printers) })
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	go mon.Run(ctx)
+	monitorDone := make(chan struct{})
+	go func() {
+		mon.Run(ctx)
+		close(monitorDone)
+	}()
 	disc := discovery.Listen(ctx)
 	if o.replay == "" {
 		// Follows printers that got another address from DHCP.
@@ -126,9 +129,11 @@ func serve(ctx context.Context, o serveOptions) error {
 		// Cancels long-lived event streams on shutdown.
 		BaseContext: func(net.Listener) context.Context { return ctx },
 	}
+	serverDone := make(chan struct{})
 	go func() {
+		defer close(serverDone)
 		<-ctx.Done()
-		shutdown, stop := context.WithTimeout(context.Background(), 5*time.Second)
+		shutdown, stop := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer stop()
 		srv.Shutdown(shutdown)
 	}()
@@ -136,5 +141,18 @@ func serve(ctx context.Context, o serveOptions) error {
 	if err = srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
+	// Lets the requests in progress finish and the printers disconnect,
+	// which also stops the camera streams and their ffmpeg processes.
+	<-serverDone
+	select {
+	case <-monitorDone:
+		slog.Info("stopped")
+	case <-time.After(shutdownTimeout):
+		slog.Warn("printers did not disconnect in time")
+	}
 	return nil
 }
+
+// shutdownTimeout is how long stopping waits for the requests in progress
+// and, after them, for the printers.
+const shutdownTimeout = 5 * time.Second

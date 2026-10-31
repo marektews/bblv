@@ -132,7 +132,13 @@ Katalog danych: domyślnie `%ProgramData%\bblv` (Windows) / `/var/lib/bblv` (Lin
 config.json     drukarki, hash hasła — zapis atomowy, uprawnienia 0600
 cache/          geometria + miniatury
 recordings/     nagrania MQTT (.jsonl)
+filaments.json  nazwy profili filamentów z plików wydruków
+printer-ca.pem  CA drukarek poznane przy relokacji
+bblv.log        log usługi Windows, do 5 MB + bblv.log.1
 ```
+- Pliki konfiguracyjne zapisywane przez `internal/atomicfile`: plik tymczasowy, `fsync`, rename, `fsync` katalogu (poza Windows) — po zaniku prądu zostaje stara albo nowa treść, nigdy pusty plik.
+- Monitor śledzi konfigurację przez `config.Store.Watch`: po każdym zapisie, jeszcze pod blokadą magazynu, `SyncPrinters` dodaje, zmienia i usuwa drukarki — kolejność zmian w monitorze = kolejność zapisów (ustawienia, import kodów, relokacja).
+- Zatrzymanie: serwer HTTP kończy rozpoczęte żądania (5 s), potem monitor rozłącza drukarki, kończy pobierania i zamyka kamery (ffmpeg) — też do 5 s.
 
 ## 8. Nagrywanie / odtwarzanie
 - Nagrywanie surowych raportów MQTT (ze znacznikiem czasu) i nazwy pliku wydruku do `.jsonl`.

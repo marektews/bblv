@@ -84,24 +84,47 @@ func Listen(ctx context.Context) *Listener {
 			}
 			if d, ok := Parse(buf[:n]); ok {
 				d.LastSeen = time.Now()
-				l.mu.Lock()
-				l.devices[d.Serial] = d
-				l.mu.Unlock()
+				l.add(d)
 			}
 		}
 	}()
 	return l
 }
 
+const (
+	forgetAfter = 30 * time.Minute // printers announce themselves every few seconds
+	maxDevices  = 256              // bounds what announcements with made-up serials take
+)
+
+func (l *Listener) add(d Device) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if _, known := l.devices[d.Serial]; !known && len(l.devices) >= maxDevices {
+		l.forgetLocked(d.LastSeen)
+		if len(l.devices) >= maxDevices {
+			return
+		}
+	}
+	l.devices[d.Serial] = d
+}
+
+// forgetLocked drops the printers not seen for forgetAfter.
+func (l *Listener) forgetLocked(now time.Time) {
+	for serial, d := range l.devices {
+		if now.Sub(d.LastSeen) >= forgetAfter {
+			delete(l.devices, serial)
+		}
+	}
+}
+
 // Devices returns printers seen within the last 30 minutes, sorted by name.
 func (l *Listener) Devices() []Device {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	l.forgetLocked(time.Now())
 	out := []Device{}
 	for _, d := range l.devices {
-		if time.Since(d.LastSeen) < 30*time.Minute {
-			out = append(out, d)
-		}
+		out = append(out, d)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out

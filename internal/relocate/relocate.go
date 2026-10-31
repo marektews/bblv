@@ -38,10 +38,11 @@ const (
 	parallel     = 32 // addresses probed at once
 )
 
-// Printers is the part of monitor.Monitor the relocator uses.
+// Printers is the part of monitor.Monitor the relocator uses. The monitor
+// follows the configuration (config.Store.Watch), so saving a new address
+// reconnects the printer.
 type Printers interface {
 	Printers() []monitor.Info
-	ReplacePrinter(cfg config.Printer) error
 }
 
 // ConfigStore is the part of config.Store the relocator uses.
@@ -216,9 +217,8 @@ func (r *Relocator) scan(ctx context.Context, prefix string) map[string][]*x509.
 
 var errEdited = errors.New("the address was changed meanwhile")
 
-// move saves the printer's new address and reconnects it.
+// move saves the printer's new address, which reconnects it.
 func (r *Relocator) move(p config.Printer, host string) {
-	var moved config.Printer
 	err := r.cfg.Update(func(c *config.Config) error {
 		target, findErr := c.Printer(p.ID)
 		if findErr != nil {
@@ -228,7 +228,6 @@ func (r *Relocator) move(p config.Printer, host string) {
 			return errEdited
 		}
 		target.Host = host
-		moved = *target
 		return nil
 	})
 	if err != nil {
@@ -237,9 +236,6 @@ func (r *Relocator) move(p config.Printer, host string) {
 	}
 	slog.Info("printer found at a new address", "printer", p.ID, "from", p.Host, "to", host)
 	delete(r.offline, p.ID)
-	if err = r.mon.ReplacePrinter(moved); err != nil {
-		slog.Warn("printer not reconnected", "printer", p.ID, "err", err)
-	}
 }
 
 // subnet returns the first three octets of an IPv4 address.

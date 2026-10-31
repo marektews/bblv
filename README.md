@@ -90,8 +90,11 @@ bblv service uninstall
 ```
 
 This registers a Windows service or a systemd unit started at boot. On
-Windows the service logs to `bblv.log` in the data directory; on Linux use
-`journalctl -u bblv`.
+Windows the service logs to `bblv.log` in the data directory, up to 5 MB,
+with the 5 MB before in `bblv.log.1`; on Linux use `journalctl -u bblv`. A
+printer that cannot be reached is reported when it happens and then once an
+hour. Stopping the service lets requests in progress finish and disconnects
+the printers, which also ends ffmpeg processes of the cameras.
 
 ## Configuration
 
