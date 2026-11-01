@@ -233,6 +233,7 @@ export interface AppConfig {
   passwordSet: boolean
   studioConfig: { path: string; found: boolean }
   ntfy: NtfyConfig
+  lanAddress: string // where other devices reach the server, '' when not known
 }
 
 // Kinds of notifications, the most important first (internal/notify).
@@ -344,7 +345,7 @@ export async function prepareTimelapse(
   id: string,
   name: string,
   signal?: AbortSignal,
-): Promise<{ ready: TimelapseFrames } | { done: number; size: number }> {
+): Promise<{ ready: TimelapseFrames } | { done: number; size: number; queued: boolean }> {
   const resp = await fetch(`${timelapseUrl(id, name)}/frames`, { signal })
   if (resp.status === 401) {
     onUnauthorized()
@@ -353,7 +354,7 @@ export async function prepareTimelapse(
   if (!resp.ok) {
     throw new ApiError(resp.status, data)
   }
-  return resp.status === 202 ? (data as { done: number; size: number }) : { ready: data as TimelapseFrames }
+  return resp.status === 202 ? (data as { done: number; size: number; queued: boolean }) : { ready: data as TimelapseFrames }
 }
 
 export function setLight(id: string, on: boolean): Promise<void> {

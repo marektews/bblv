@@ -69,6 +69,7 @@ type server struct {
 	version    string
 	ntfyClient *http.Client // sends test notifications
 	tl         *timelapse.Library
+	lanAddress func() string
 }
 
 // Deps are the services used by the handlers.
@@ -81,11 +82,14 @@ type Deps struct {
 	// besides addresses and local names, e.g. that of a reverse proxy.
 	AllowedHosts []string
 	Version      string // of the server, sent to the pages
+	// LANAddress returns where other devices in the network reach the
+	// server, e.g. a phone opening a notification; "" when not known.
+	LANAddress func() string
 }
 
 // New returns the HTTP handler of the application.
 func New(d Deps) http.Handler {
-	s := &server{mon: d.Monitor, cfg: d.Config, auth: d.Auth, disc: d.Discovery, version: d.Version, ntfyClient: &http.Client{}, tl: newTimelapses(d.Monitor)}
+	s := &server{mon: d.Monitor, cfg: d.Config, auth: d.Auth, disc: d.Discovery, version: d.Version, ntfyClient: &http.Client{}, tl: newTimelapses(d.Monitor), lanAddress: d.LANAddress}
 	for _, h := range d.AllowedHosts {
 		s.hosts = append(s.hosts, normalizeHost(h))
 	}

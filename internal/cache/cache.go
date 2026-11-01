@@ -23,15 +23,15 @@ type Cache struct {
 	dir   string
 	limit int64
 	mu    sync.Mutex
-	inUse func() []string // keys never evicted
+	inUse []func() []string // return keys never evicted
 }
 
-// KeepInUse sets a function returning the keys that must not be evicted.
-// It is called with the cache locked and must not use the cache.
+// KeepInUse adds a function returning keys that must not be evicted. It is
+// called with the cache locked and must not use the cache.
 func (c *Cache) KeepInUse(f func() []string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.inUse = f
+	c.inUse = append(c.inUse, f)
 }
 
 // Open creates the directory if needed and removes leftovers of interrupted writes.
@@ -134,8 +134,8 @@ func (c *Cache) evict(keep string) {
 		return
 	}
 	protected := map[string]bool{keep: true}
-	if c.inUse != nil {
-		for _, k := range c.inUse() {
+	for _, f := range c.inUse {
+		for _, k := range f() {
 			protected[k] = true
 		}
 	}

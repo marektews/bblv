@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import {
   addPrinter,
+  ApiError,
   deletePrinter,
   getConfig,
   getDiscovered,
@@ -199,7 +200,7 @@ async function changePassword(unset = false) {
     ElMessage.success(unset ? t('settings.passwordRemoved') : t('settings.passwordSaved'))
     await load()
   } catch (err) {
-    ElMessage.error(message(err))
+    ElMessage.error(err instanceof ApiError && err.status === 429 ? t('login.tooMany') : message(err))
   } finally {
     pw.busy = false
   }
@@ -306,7 +307,7 @@ async function changePassword(unset = false) {
 
       <el-tab-pane name="notifications">
         <template #label><fa-icon icon="bell" class="ic" />{{ t('settings.notifications') }}</template>
-        <NotificationSettings :ntfy="config?.ntfy" />
+        <NotificationSettings :ntfy="config?.ntfy" :lan-address="config?.lanAddress" />
       </el-tab-pane>
 
       <el-tab-pane name="access">

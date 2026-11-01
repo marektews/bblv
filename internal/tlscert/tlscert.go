@@ -158,7 +158,7 @@ func LocalNames(allowed []string) Names {
 	}
 	add(&n.Required, "127.0.0.1")
 	add(&n.Required, "::1")
-	add(&n.Required, primaryIPv4())
+	add(&n.Required, PrimaryIPv4())
 	for _, a := range allowed {
 		add(&n.Required, a)
 	}
@@ -177,10 +177,10 @@ func LocalNames(allowed []string) Names {
 	return n
 }
 
-// primaryIPv4 returns the address the computer sends from to other
+// PrimaryIPv4 returns the address the computer sends from to other
 // networks, "" without a route to them, e.g. while the network is still
 // starting. Connecting a UDP socket only chooses the route; nothing is sent.
-func primaryIPv4() string {
+func PrimaryIPv4() string {
 	c, err := net.Dial("udp4", "192.0.2.1:9") // TEST-NET-1, never reached
 	if err != nil {
 		return ""

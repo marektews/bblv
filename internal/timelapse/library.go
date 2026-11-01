@@ -47,19 +47,24 @@ const (
 	listedThumbnails = 50
 	// keptClips is how many videos keep their frame index in memory.
 	keptClips = 8
+	// watchedFor is how long after its last frame was read a video stays
+	// in the cache whatever else comes in.
+	watchedFor = 15 * time.Minute
 )
 
 // Clip is a video in the cache.
 type Clip struct {
 	Key   string // in the cache, from the size it had on the card
 	Path  string
-	Index *Index // nil for a video that is no AVI
+	Index *Index       // nil for a video that is no AVI
+	used  atomic.Int64 // unix time in nanoseconds it was last read
 }
 
 // Progress tells how far a download has come.
 type Progress struct {
-	Done atomic.Int64 `json:"-"`
-	Size int64        `json:"size"`
+	Done   atomic.Int64 // bytes
+	Size   int64
+	Queued atomic.Bool // waiting for another download from the printer to end
 }
 
 // Library lists the timelapses of the printers and brings the ones watched
@@ -80,11 +85,28 @@ type Library struct {
 
 // NewLibrary keeps the videos in store.
 func NewLibrary(open Opener, store *cache.Cache) *Library {
-	return &Library{
+	l := &Library{
 		open: open, store: store,
 		slots: map[string]chan struct{}{}, clips: map[string]*Clip{},
 		fetching: map[string]*Progress{}, lastError: map[string]error{},
 	}
+	store.KeepInUse(l.watched)
+	return l
+}
+
+// watched returns the cache keys of the videos read lately, which a player
+// may still be showing.
+func (l *Library) watched() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var keys []string
+	since := time.Now().Add(-watchedFor).UnixNano()
+	for _, c := range l.clips {
+		if c.used.Load() >= since {
+			keys = append(keys, c.Key)
+		}
+	}
+	return keys
 }
 
 // session waits for the printer's turn for use, which ctx may give up, and
@@ -216,6 +238,7 @@ func (l *Library) Prepare(ctx context.Context, printer, name string) (*Clip, *Pr
 	defer l.mu.Unlock()
 	if p = l.fetching[id]; p == nil {
 		p = &Progress{Size: videos[i].Size}
+		p.Queued.Store(true)
 		l.fetching[id] = p
 		go l.download(ctx, printer, name, key, p)
 	}
@@ -253,6 +276,7 @@ func (l *Library) download(ctx context.Context, printer, name, key string, p *Pr
 	id := printer + "/" + name
 	err := func() error {
 		card, _, done, err := l.session(context.WithoutCancel(ctx), printer, "download", downloadTimeout)
+		p.Queued.Store(false)
 		if err != nil {
 			return err
 		}
@@ -329,6 +353,7 @@ func (l *Library) Ready(printer, name string) (*Clip, error) {
 	if _, err := os.Stat(c.Path); err != nil {
 		return nil, ErrNotReady
 	}
+	c.used.Store(time.Now().UnixNano())
 	return c, nil
 }
 

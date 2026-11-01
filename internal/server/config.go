@@ -108,11 +108,16 @@ func (s *server) getConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	path := bambustudio.ConfigPath()
 	_, err := os.Stat(path)
+	lan := ""
+	if s.lanAddress != nil {
+		lan = s.lanAddress()
+	}
 	writeJSON(w, map[string]any{
 		"printers":     printers,
 		"passwordSet":  c.PasswordHash != "",
 		"studioConfig": map[string]any{"path": path, "found": err == nil},
 		"ntfy":         ntfyViewOf(c.Ntfy),
+		"lanAddress":   lan,
 	})
 }
 

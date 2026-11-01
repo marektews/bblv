@@ -60,6 +60,7 @@ func TestEvictsWholeEntriesNotInUse(t *testing.T) {
 		at := time.Now().Add(-d)
 		os.Chtimes(filepath.Join(dir, key+ext), at, at)
 	}
+	c.KeepInUse(func() []string { return nil })
 	c.KeepInUse(func() []string { return []string{"shown"} })
 	put("shown", ".bin")
 	age("shown", ".bin", 3*time.Hour) // the oldest, but a printer shows it

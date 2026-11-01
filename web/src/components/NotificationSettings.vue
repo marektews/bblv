@@ -5,7 +5,8 @@ import { useI18n } from 'vue-i18n'
 import { NOTICE_KINDS, setNtfy, testNtfy, type NoticeKind, type NtfyConfig } from '../api'
 import { browserNotify, enable, showTest, systemSupport } from '../notifications'
 
-const props = defineProps<{ ntfy: NtfyConfig | undefined }>()
+// lanAddress is where other devices reach the server, '' when not known.
+const props = defineProps<{ ntfy: NtfyConfig | undefined; lanAddress?: string }>()
 const { t, locale } = useI18n()
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err))
 
@@ -46,6 +47,22 @@ const saved = reactive({ url: '', topic: '', hasToken: false })
 const saving = ref(false)
 const testing = ref(false)
 
+// A loopback address only works on the computer running the server, not on
+// the phone a notification is opened on.
+function isLocal(link: string): boolean {
+  let host = ''
+  try {
+    host = new URL(link).hostname
+  } catch {
+    return false
+  }
+  return host === 'localhost' || host.endsWith('.localhost') || host === '[::1]' || /^127\./.test(host)
+}
+
+// The address of this page, unless it only works on the computer running
+// the server; then the server's address in the network.
+const defaultLink = () => (isLocal(window.location.origin) && props.lanAddress ? props.lanAddress : window.location.origin)
+
 function apply(n: NtfyConfig) {
   // Not set up yet: messages in the language of the page, opening this address.
   const fresh = !n.topic && !n.link
@@ -56,16 +73,20 @@ function apply(n: NtfyConfig) {
     clearToken: false,
     events: [...n.events],
     lang: fresh ? locale.value : n.lang,
-    link: fresh ? window.location.origin : n.link,
+    link: fresh ? defaultLink() : n.link,
   })
   Object.assign(saved, { url: n.url, topic: n.topic, hasToken: n.hasToken })
 }
 
+// The settings page reloads the configuration after other changes, e.g. of
+// a printer; only changed ntfy settings replace what is being typed.
 watch(
-  () => props.ntfy,
-  (n) => n && apply(n),
+  () => JSON.stringify(props.ntfy ?? null),
+  () => props.ntfy && apply(props.ntfy),
   { immediate: true },
 )
+
+const localLink = computed(() => isLocal(form.link.trim()))
 
 // The server keeps the token for its own server only.
 const tokenAgain = computed(
@@ -159,6 +180,12 @@ async function sendTest() {
       <el-form-item :label="t('notify.ntfyLink')">
         <el-input v-model="form.link" placeholder="https://192.168.1.10:8443" />
         <div class="field-hint">{{ t('notify.ntfyLinkHint') }}</div>
+        <div v-if="localLink" class="local-link">
+          <fa-icon icon="triangle-exclamation" class="ic" />{{ t('notify.linkLocal') }}
+          <el-button v-if="lanAddress" link type="primary" size="small" @click="form.link = lanAddress">
+            {{ t('notify.useLan', { address: lanAddress }) }}
+          </el-button>
+        </div>
       </el-form-item>
       <div class="buttons">
         <el-button type="primary" native-type="submit" :loading="saving" :disabled="tokenAgain">
@@ -198,6 +225,14 @@ h3 {
 
 .el-alert {
   margin-bottom: 8px;
+}
+
+.local-link {
+  width: 100%;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--el-color-warning);
 }
 
 .kinds {

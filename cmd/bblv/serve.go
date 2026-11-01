@@ -165,7 +165,14 @@ func serve(ctx context.Context, o serveOptions) error {
 			BaseContext: func(net.Listener) context.Context { return ctx },
 		}
 	}
-	app := server.New(server.Deps{Monitor: mon, Config: cfgStore, Auth: auth.New(cfgStore), Discovery: disc, AllowedHosts: splitList(o.allowHosts), Version: version})
+	scheme, addr := "https", o.https
+	if o.https == "" {
+		scheme, addr = "http", o.listen
+	}
+	app := server.New(server.Deps{
+		Monitor: mon, Config: cfgStore, Auth: auth.New(cfgStore), Discovery: disc, AllowedHosts: splitList(o.allowHosts), Version: version,
+		LANAddress: func() string { return lanAddress(scheme, addr, tlscert.PrimaryIPv4()) },
+	})
 	var servers []*http.Server
 	if o.https == "" {
 		servers = append(servers, newServer(o.listen, app))
@@ -225,6 +232,28 @@ func serve(ctx context.Context, o serveOptions) error {
 		slog.Warn("printers did not disconnect in time")
 	}
 	return failed
+}
+
+// lanAddress returns the address other devices in the network reach a
+// server listening on addr at, given the computer's address in the network;
+// "" for a server listening only on a loopback address or the computer
+// without an address.
+func lanAddress(scheme, addr, primary string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return ""
+	}
+	ip := net.ParseIP(host)
+	switch {
+	case host == "" || ip != nil && ip.IsUnspecified():
+		host = primary
+	case ip != nil && ip.IsLoopback(), strings.EqualFold(host, "localhost"):
+		return ""
+	}
+	if host == "" {
+		return ""
+	}
+	return scheme + "://" + net.JoinHostPort(host, port)
 }
 
 // shutdownTimeout is how long stopping waits for the requests in progress

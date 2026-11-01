@@ -172,6 +172,8 @@ onBeforeUnmount(() => {
       >
         <fa-icon :icon="full ? 'compress' : 'expand'" />
       </button>
+      <!-- The stream stays open while the server reconnects to the camera; the last frame stays. -->
+      <div v-if="loaded && errorText" class="stalled"><fa-icon icon="video-slash" class="ic" />{{ errorText }}</div>
       <div v-if="!loaded" class="hint">
         <template v-if="!printer.online"><fa-icon icon="plug-circle-xmark" class="ic" />{{ t('state.OFFLINE') }}</template>
         <div v-else-if="errorText" class="note">
@@ -186,6 +188,18 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.stalled {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  max-width: calc(100% - 16px);
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 12px;
+}
+
 .head {
   display: flex;
   align-items: center;

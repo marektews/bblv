@@ -85,7 +85,7 @@ func (s *server) timelapseVideo(w http.ResponseWriter, r *http.Request) {
 
 // timelapseFrames prepares a video: while it is being brought from the
 // printer, which takes minutes for a long one, it answers 202 with how far
-// it has come, {done, size}, for the page to ask again; then the frames of
+// it has come, {done, size, queued}, for the page to ask again; then the frames of
 // an AVI video, which the player asks for one by one, or frames 0 for
 // another, which the browser plays itself.
 func (s *server) timelapseFrames(w http.ResponseWriter, r *http.Request) {
@@ -96,7 +96,7 @@ func (s *server) timelapseFrames(w http.ResponseWriter, r *http.Request) {
 	case p != nil:
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)
-		json.NewEncoder(w).Encode(map[string]int64{"done": p.Done.Load(), "size": p.Size})
+		json.NewEncoder(w).Encode(map[string]any{"done": p.Done.Load(), "size": p.Size, "queued": p.Queued.Load()})
 	case c.Index == nil:
 		writeJSON(w, timelapse.Index{})
 	default:

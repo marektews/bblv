@@ -128,7 +128,7 @@ watch(speed, () => {
 })
 
 // How far the server has come bringing the video from the printer.
-const fetched = ref<{ done: number; size: number; since: number; from: number } | null>(null)
+const fetched = ref<{ done: number; size: number; queued: boolean; since: number; from: number } | null>(null)
 const ready = ref(false) // in the server's cache: it plays and downloads at once
 
 // prepare asks the server to bring the video from the printer, once a
@@ -139,9 +139,11 @@ async function prepare(name: string, signal: AbortSignal): Promise<TimelapseFram
     if ('ready' in r) {
       return r.ready
     }
-    // The rate since the first answer estimates the time left.
-    fetched.value ??= { ...r, since: Date.now(), from: r.done }
-    Object.assign(fetched.value, { done: r.done, size: r.size })
+    // The rate since the download began estimates the time left.
+    if (!fetched.value || (fetched.value.queued && !r.queued)) {
+      fetched.value = { ...r, since: Date.now(), from: r.done }
+    }
+    Object.assign(fetched.value, { done: r.done, size: r.size, queued: r.queued })
     await new Promise((resolve) => setTimeout(resolve, 1000))
     signal.throwIfAborted()
   }
@@ -233,7 +235,8 @@ const size = computed(() => amount((props.video?.size ?? 0) / 1e6, 'MB', 1))
       <div v-if="loading" class="wait">
         <div><fa-icon icon="spinner" spin class="ic" />{{ t('timelapse.fetching', { size }) }}</div>
         <el-progress v-if="fetched" :percentage="percent" :stroke-width="8" class="fetch-progress" />
-        <div v-if="fetched" class="hint">{{ progressText }}</div>
+        <div v-if="fetched?.queued" class="hint">{{ t('timelapse.queued') }}</div>
+        <div v-else-if="fetched" class="hint">{{ progressText }}</div>
         <div class="hint">{{ t('timelapse.fetchingHint') }}</div>
       </div>
       <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />

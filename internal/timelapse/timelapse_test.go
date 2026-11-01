@@ -176,6 +176,11 @@ func TestLibrary(t *testing.T) {
 	if _, err = lib.Frame("a1", videos[0].Name, 2); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("frame past the end: %v", err)
 	}
+	// A video being watched stays in the cache whatever else comes in.
+	clip, _ := lib.Ready("a1", videos[0].Name)
+	if watched := lib.watched(); len(watched) != 1 || watched[0] != clip.Key {
+		t.Fatalf("watched %v, want %s", watched, clip.Key)
+	}
 
 	// A video that grew, still being recorded, is fetched again.
 	card.mu.Lock()
