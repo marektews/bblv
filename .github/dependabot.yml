@@ -22,6 +22,11 @@ updates:
     groups:
       npm:
         patterns: ['*']
+    ignore:
+      # vue-tsc 3.3 cannot run TypeScript 7, the native compiler, which has
+      # no lib/tsc; lift this once vue-tsc supports it.
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: github-actions
     directory: /
