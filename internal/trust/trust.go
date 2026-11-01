@@ -8,6 +8,7 @@
 package trust
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
@@ -15,6 +16,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -28,6 +30,10 @@ const pinsHeader = "Printers"
 // Store holds the learned CAs; it is safe for concurrent use.
 type Store struct {
 	path string // "" keeps them only in memory
+	// broken tells why the file could not be read. Learning the CAs again
+	// would trust whatever device answers first, so then no certificate is
+	// accepted and the file is left as it is.
+	broken error
 
 	mu  sync.Mutex
 	cas []*authority
@@ -38,20 +44,53 @@ type authority struct {
 	serials []string // upper case
 }
 
-// Load reads the CAs kept at path; a missing file gives an empty store.
+// Load reads the CAs kept at path; a missing file gives an empty store. A
+// file that cannot be read or parsed gives a store that refuses every
+// certificate, with the reason, and never overwrites the file.
 func Load(path string) (*Store, error) {
 	s := &Store{path: path}
+	cas, err := read(path)
+	if err != nil {
+		s.broken = &FileError{Name: filepath.Base(path), Err: err}
+		return s, s.broken
+	}
+	s.cas = cas
+	return s, nil
+}
+
+// FileError is returned for every certificate while the file of the CAs
+// cannot be read.
+type FileError struct {
+	Name string // of the file
+	Err  error
+}
+
+func (e *FileError) Error() string {
+	return fmt.Sprintf("%s cannot be read (%v); printers are not connected until it is fixed, or deleted to learn their CAs again, and bblv restarted", e.Name, e.Err)
+}
+
+func (e *FileError) Unwrap() error {
+	return e.Err
+}
+
+func read(path string) ([]*authority, error) {
 	b, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return s, nil
+		return nil, nil
 	}
 	if err != nil {
-		return s, err
+		return nil, err
 	}
-	for block, rest := pem.Decode(b); block != nil; block, rest = pem.Decode(rest) {
+	var cas []*authority
+	rest := b
+	for {
+		var block *pem.Block
+		if block, rest = pem.Decode(rest); block == nil {
+			break
+		}
 		c, parseErr := x509.ParseCertificate(block.Bytes)
 		if parseErr != nil {
-			return s, parseErr
+			return nil, parseErr
 		}
 		a := &authority{cert: c}
 		for serial := range strings.SplitSeq(block.Headers[pinsHeader], ",") {
@@ -59,9 +98,13 @@ func Load(path string) (*Store, error) {
 				a.serials = append(a.serials, strings.ToUpper(serial))
 			}
 		}
-		s.cas = append(s.cas, a)
+		cas = append(cas, a)
 	}
-	return s, nil
+	// pem.Decode stops at the first block it cannot read and leaves it.
+	if len(bytes.TrimSpace(rest)) > 0 {
+		return nil, errors.New("it holds something other than certificates")
+	}
+	return cas, nil
 }
 
 // Count returns the number of known CAs.
@@ -86,6 +129,9 @@ func (s *Store) Check(chain []*x509.Certificate, serial string) error {
 	serial = strings.ToUpper(serial)
 	if cn := chain[0].Subject.CommonName; !strings.EqualFold(cn, serial) {
 		return fmt.Errorf("the certificate is for %q, not the printer %s", cn, serial)
+	}
+	if s.broken != nil {
+		return s.broken
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -211,7 +257,7 @@ func signs(ca *x509.Certificate, chain []*x509.Certificate) bool {
 
 // saveLocked writes the file; the CAs stay in memory when that fails.
 func (s *Store) saveLocked() {
-	if s.path == "" {
+	if s.path == "" || s.broken != nil {
 		return
 	}
 	var b []byte

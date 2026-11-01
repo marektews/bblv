@@ -80,15 +80,22 @@ func (c *Client) Connect(ctx context.Context) error {
 		return ctx.Err()
 	}
 	if err := t.Error(); err != nil {
-		return fmt.Errorf("connect to %s: %w (%s)", c.p.Host, err, connectHint(err))
+		if hint := connectHint(err); hint != "" {
+			return fmt.Errorf("connect to %s: %w (%s)", c.p.Host, err, hint)
+		}
+		return fmt.Errorf("connect to %s: %w", c.p.Host, err)
 	}
 	return nil
 }
 
-// connectHint tells what to check after a failed connection.
+// connectHint tells what to check after a failed connection, "" when the
+// error says it itself.
 func connectHint(err error) string {
-	if errors.Is(err, packets.ErrorRefusedBadUsernameOrPassword) || errors.Is(err, packets.ErrorRefusedNotAuthorised) {
+	switch {
+	case errors.Is(err, packets.ErrorRefusedBadUsernameOrPassword) || errors.Is(err, packets.ErrorRefusedNotAuthorised):
 		return "check the access code"
+	case errors.Is(err, trust.ErrUntrusted) || errors.As(err, new(*trust.FileError)):
+		return ""
 	}
 	return "check that the printer is on and its address is right; TCP port 8883 must be reachable"
 }

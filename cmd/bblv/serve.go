@@ -96,7 +96,7 @@ func serve(ctx context.Context, o serveOptions) error {
 	// printers are pinned to them.
 	cas, err := trust.Load(filepath.Join(o.dataDir, "printer-ca.pem"))
 	if err != nil {
-		slog.Warn("printer CAs not loaded, learning them again", "err", err)
+		slog.Error("printer CAs not loaded", "err", err)
 	}
 	mon.TrustPrinters(cas)
 	if err = mon.KeepFilamentNames(filepath.Join(o.dataDir, "filaments.json")); err != nil {

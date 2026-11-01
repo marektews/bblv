@@ -9,6 +9,8 @@ import (
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/eclipse/paho.mqtt.golang/packets"
+
+	"github.com/marektews/bblv/internal/trust"
 )
 
 func TestConnectHint(t *testing.T) {
@@ -22,6 +24,12 @@ func TestConnectHint(t *testing.T) {
 	} {
 		if got := connectHint(tc.err); !strings.Contains(got, tc.want) {
 			t.Errorf("connectHint(%v) = %q, want it to mention %q", tc.err, got, tc.want)
+		}
+	}
+	// Certificate errors say what to do; checking the address would mislead.
+	for _, err := range []error{trust.ErrUntrusted, &trust.FileError{Name: "printer-ca.pem", Err: errors.New("x")}} {
+		if got := connectHint(fmt.Errorf("%w : %w", packets.ErrorNetworkError, err)); got != "" {
+			t.Errorf("connectHint(%v) = %q, want none", err, got)
 		}
 	}
 }

@@ -158,8 +158,11 @@ gets no access code. The view of the printer then says why it is offline.
 For the same reason, changing a printer's serial number in **Settings**
 needs its access code again, and removing a printer also forgets its pin
 and a CA no other printer uses. If the certificates change for real, e.g. with new firmware, delete
-`printer-ca.pem` and restart bblv. Expiry dates are not checked: the CA of
-the A1 expires in 2032, before the certificates it signed.
+`printer-ca.pem` and restart bblv. If the file cannot be read, bblv does
+not learn the CAs again, which would trust whatever device answers first:
+the printers stay offline, their view says why, and the file is left for
+you to fix or delete. Expiry dates are not checked: the CA of the A1
+expires in 2032, before the certificates it signed.
 
 The printer table shows whether each printer is connected and has an SD
 card. It can be sorted by name, IP address or serial number; the browser

@@ -1,14 +1,19 @@
 package trust
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/pem"
 	"errors"
 	"math/big"
+	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -175,5 +180,58 @@ func TestExpiredCAStillIdentifies(t *testing.T) {
 		if err := s.Check([]*x509.Certificate{leaf, ca}, "A1SERIAL"); err != nil {
 			t.Fatalf("expired CA refused: %v", err)
 		}
+	}
+}
+
+// A CA file that cannot be read must not be learned again and overwritten:
+// that would trust whatever device answers first. No certificate is
+// accepted until it is fixed or deleted, and the reason says so.
+func TestBrokenFileRefusesAndIsKept(t *testing.T) {
+	bbl, bblKey := certificate(t, "BBL CA", nil, nil)
+	good := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Headers: map[string]string{pinsHeader: "A1SERIAL"}, Bytes: bbl.Raw})
+	dir := t.TempDir()
+	for name, content := range map[string][]byte{
+		"garbage":  []byte("not a certificate\n"),
+		"trailing": append(slices.Clone(good), "-----BEGIN CERTIFICATE-----\nbroken\n"...),
+		"bad DER":  pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte("xx")}),
+	} {
+		path := filepath.Join(dir, name+".pem")
+		if err := os.WriteFile(path, content, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		s, err := Load(path)
+		if err == nil {
+			t.Errorf("%s: loaded", name)
+			continue
+		}
+		checkErr := s.Check(chainOf(t, "A1SERIAL", bbl, bblKey), "A1SERIAL")
+		if checkErr == nil || !strings.Contains(checkErr.Error(), name+".pem") {
+			t.Errorf("%s: Check = %v, want the reason", name, checkErr)
+		}
+		s.Retain(nil)
+		if after, _ := os.ReadFile(path); !bytes.Equal(after, content) {
+			t.Errorf("%s: file changed", name)
+		}
+	}
+
+	// A file that exists but cannot be read, here a directory.
+	unreadable := filepath.Join(dir, "dir.pem")
+	if err := os.Mkdir(unreadable, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if s, err := Load(unreadable); err == nil || s.Check(chainOf(t, "A1SERIAL", bbl, bblKey), "A1SERIAL") == nil {
+		t.Fatal("unreadable file accepted")
+	}
+
+	// A good file still loads, and a missing one is empty.
+	path := filepath.Join(dir, "good.pem")
+	if err := os.WriteFile(path, good, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if s, err := Load(path); err != nil || s.Count() != 1 {
+		t.Fatalf("good file: %d CAs, %v", s.Count(), err)
+	}
+	if s, err := Load(filepath.Join(dir, "missing.pem")); err != nil || s.Count() != 0 {
+		t.Fatalf("missing file: %v", err)
 	}
 }
