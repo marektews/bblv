@@ -1,6 +1,6 @@
 import type { IconName } from '@fortawesome/fontawesome-svg-core'
 import { useI18n } from 'vue-i18n'
-import { EXTERNAL_TRAY, type PrinterInfo, type Status, type Tray } from './api'
+import { alertKey, EXTERNAL_TRAY, type PrinterInfo, type Status, type Tray } from './api'
 
 export function useFormat() {
   const { t, locale } = useI18n()
@@ -35,6 +35,15 @@ export function useFormat() {
 export function errorCode(code: number): string {
   const hex = code.toString(16).toUpperCase().padStart(8, '0')
   return `${hex.slice(0, 4)}_${hex.slice(4)}`
+}
+
+// statusAlertKeys names the alerts a printer reports, as dismissedAlerts does.
+export function statusAlertKeys(s: Status): string[] {
+  const keys = s.hms.map((code) => alertKey('hms', code))
+  if (s.printError) {
+    keys.unshift(alertKey('error', errorCode(s.printError)))
+  }
+  return keys
 }
 
 // amsName names an AMS unit: A-D, or HT1… for the one-slot AMS HT, whose ids start at 128.

@@ -78,6 +78,7 @@ Stan (przygotowanie/druk/pauza/koniec/błąd), %, warstwa X/Y, pozostały czas +
 - Źródło: `https://e.bambulab.com/query.php?lang={en|pl}&d={prefiks numeru seryjnego}` (to samo, czego używa Bambu Studio) → `device_hms` (kody 16 hex) i `device_error` (kody `print_error`, 8 hex). Odświeżanie: `go run ./internal/hms/gen` (18 zapytań, ~7 MB) → `internal/hms/data/hms_{en,pl}.json.gz` (~60–70 KB). Teksty różne dla modeli są zachowane per prefiks (A1 = `039`).
 - Link „więcej”: `https://e.bambulab.com/index.php?e={kod}&d={prefiks}&s=device_hms|device_error&lang=…` — przekierowuje na stronę kodu w wiki albo na przegląd HMS.
 - `GET /api/printers/{id}/alerts?lang=pl|en` → `[{kind, code, severity, text, url}]`; waga HMS z bitów kodu: 1 fatal, 2 serious, 3 common, 4 info.
+- Przeczytane alerty można ukryć (× przy alercie, „Usuń wszystkie”) — dla wszystkich i na kafelku, bez zmian na drukarce. Serwer zapomina ukryty alert, gdy drukarka przestaje go zgłaszać (sprawdzane przy każdym raporcie), więc powracający znów jest widoczny; „Pokaż ukryte (N)” pokazuje je przyciemnione z „Przywróć”.
 
 **Kamera:** panel nad parametrami, zwijany (stan w `localStorage`). Pełny ekran przyciskiem w rogu obrazu lub podwójnym kliknięciem (Fullscreen API na tym samym `<img>`, więc strumień się nie przerywa); wyjście tym samym przyciskiem lub Esc. Bez Fullscreen API (iPhone) obraz wypełnia okno przeglądarki.
 
@@ -96,6 +97,7 @@ Stan (przygotowanie/druk/pauza/koniec/błąd), %, warstwa X/Y, pozostały czas +
 | GET | `/api/printers` | wszystkie drukarki, pełny opis jak w zdarzeniu `printer` |
 | GET | `/api/printers/{id}` | jedna drukarka |
 | GET | `/api/printers/{id}/alerts?lang=pl\|en` | alerty HMS i błąd wydruku z opisami i linkami do wiki |
+| POST | `/api/printers/{id}/alerts/dismiss`, `/alerts/restore` | `{keys}` (`hms:0300_0100_0001_0007`, `error:0700_8011`): ukrycie przeczytanych alertów dla wszystkich (tylko zgłaszanych teraz) / przywrócenie; lista w `dismissedAlerts` drukarki |
 | GET | `/api/events` | SSE: po połączeniu `version` (wersja serwera; inna niż przy poprzednim połączeniu = strona się przeładowuje, w ustawieniach pokazuje pasek), potem zdarzenie `printer` z pełnym opisem drukarki (`id`, `name`, `model`, `experimental`, `online`, `status`, `geometry`) — po połączeniu dla każdej drukarki, potem przy każdej zmianie; nowy `geometry.key` = przeładuj geometrię; `ready` z listą id po drukarkach wysłanych przy połączeniu; `removed` z id usuniętej; `notification` z powiadomieniem (rozdz. 4). Klient, który nie nadąża (64 zdarzenia), jest rozłączany i łączy się ponownie |
 | GET | `/api/printers/{id}/geometry` | geometria binarna (z cache), gzip, `ETag` = `geometry.key` |
 | GET | `/api/printers/{id}/thumbnail` | miniatura z `.3mf` |
@@ -156,6 +158,7 @@ config.json     drukarki, hash hasła, ustawienia ntfy — zapis atomowy, uprawn
 cache/          geometria + miniatury, timelapse'y i ich miniatury (wspólny limit 1 GB)
 recordings/     nagrania MQTT (.jsonl)
 filaments.json  nazwy profili filamentów z plików wydruków
+dismissed-alerts.json  alerty ukryte jako przeczytane, do zniknięcia z drukarki
 printer-ca.pem  CA drukarek poznane przy relokacji
 bblv.log        log usługi Windows, do 5 MB + bblv.log.1
 ```

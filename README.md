@@ -205,6 +205,14 @@ the grouping off; the browser remembers the choice. A tile shows an alert
 icon, in the colour of the most severe alert, when the printer reports HMS
 alerts or an error code.
 
+An alert that has been read can be removed with its × in the **Alerts**
+section of the printer, or all at once with **Remove all**. It is hidden for
+everyone, also from the tile, but nothing changes on the printer; when the
+printer stops reporting it, bblv forgets it, so that it shows again if it
+comes back. **Show hidden** lists the removed ones, which can be restored.
+The removed alerts are kept in `dismissed-alerts.json` in the data
+directory.
+
 Besides temperatures, fans and alerts, the status panel of a printer shows:
 
 - **Print**: the file and plate; the process profile, printer profile,

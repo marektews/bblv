@@ -273,3 +273,31 @@ func TestTimelapsesOfReplay(t *testing.T) {
 		t.Errorf("unknown printer: %d", resp.StatusCode)
 	}
 }
+
+func TestDismissAlerts(t *testing.T) {
+	ts := setup(t)
+	c := ts.Client()
+	dismissed := func() []string {
+		var info struct {
+			DismissedAlerts []string `json:"dismissedAlerts"`
+		}
+		getJSON(t, ts.URL+"/api/printers/replay", &info)
+		return info.DismissedAlerts
+	}
+	// The recording reports print error 0300_400C and one HMS alert.
+	if r := send(t, c, "POST", ts.URL+"/api/printers/replay/alerts/dismiss", map[string]any{"keys": []string{"error:0300_400C"}}); r.StatusCode != http.StatusNoContent {
+		t.Fatalf("dismiss: %d", r.StatusCode)
+	}
+	if got := dismissed(); len(got) != 1 || got[0] != "error:0300_400C" {
+		t.Fatalf("dismissed %v", got)
+	}
+	if r := send(t, c, "POST", ts.URL+"/api/printers/replay/alerts/restore", map[string]any{"keys": []string{"error:0300_400C"}}); r.StatusCode != http.StatusNoContent {
+		t.Fatalf("restore: %d", r.StatusCode)
+	}
+	if got := dismissed(); len(got) != 0 {
+		t.Fatalf("after restore %v", got)
+	}
+	if r := send(t, c, "POST", ts.URL+"/api/printers/nope/alerts/dismiss", map[string]any{"keys": []string{}}); r.StatusCode != http.StatusNotFound {
+		t.Fatalf("unknown printer: %d", r.StatusCode)
+	}
+}

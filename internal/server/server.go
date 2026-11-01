@@ -108,6 +108,8 @@ func New(d Deps) http.Handler {
 	mux.HandleFunc("GET /api/printers/{id}/thumbnail", s.thumbnail)
 	mux.HandleFunc("GET /api/printers/{id}/camera", s.camera)
 	mux.HandleFunc("GET /api/printers/{id}/alerts", s.alerts)
+	mux.HandleFunc("POST /api/printers/{id}/alerts/dismiss", s.dismissAlerts)
+	mux.HandleFunc("POST /api/printers/{id}/alerts/restore", s.restoreAlerts)
 	mux.HandleFunc("POST /api/printers/{id}/upload", s.upload)
 	mux.HandleFunc("POST /api/printers/{id}/light", s.light)
 	mux.HandleFunc("GET /api/printers/{id}/timelapses", s.timelapses)
@@ -536,4 +538,29 @@ func writeError(w http.ResponseWriter, code int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
+// dismissAlerts hides alerts of a printer for everyone until they go away:
+// {"keys": ["hms:0300_0100_0001_0007", "error:0700_8011"]}; restoreAlerts
+// shows them again.
+func (s *server) dismissAlerts(w http.ResponseWriter, r *http.Request) {
+	s.changeAlerts(w, r, s.mon.DismissAlerts)
+}
+
+func (s *server) restoreAlerts(w http.ResponseWriter, r *http.Request) {
+	s.changeAlerts(w, r, s.mon.RestoreAlerts)
+}
+
+func (s *server) changeAlerts(w http.ResponseWriter, r *http.Request, change func(id string, keys []string) error) {
+	var in struct {
+		Keys []string `json:"keys"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	if err := change(r.PathValue("id"), in.Keys); err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

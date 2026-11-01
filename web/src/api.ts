@@ -105,6 +105,7 @@ export interface PrinterInfo {
   online: boolean
   camera: boolean
   timelapse: boolean // its SD card can be read for the timelapses
+  dismissedAlerts: string[] // alerts of status someone has hidden, see alertKey
   // Why the camera does not work: liveview-disabled, ffmpeg-missing, refused,
   // rtsp-unreachable or stream; cameraDetail is the server's message.
   cameraError?: string
@@ -191,6 +192,14 @@ export interface Alert {
 export function getAlerts(id: string, lang: string): Promise<Alert[]> {
   return request('GET', `${printerUrl(id)}/alerts?lang=${encodeURIComponent(lang)}`)
 }
+
+// alertKey names an alert in dismissedAlerts, e.g. "error:0700_8011".
+export const alertKey = (kind: string, code: string) => `${kind}:${code}`
+
+// dismissAlerts hides alerts for everyone until the printer stops reporting
+// them; restoreAlerts shows them again.
+export const dismissAlerts = (id: string, keys: string[]) => request<void>('POST', `${printerUrl(id)}/alerts/dismiss`, { keys })
+export const restoreAlerts = (id: string, keys: string[]) => request<void>('POST', `${printerUrl(id)}/alerts/restore`, { keys })
 
 export interface AuthStatus {
   required: boolean

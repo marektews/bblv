@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { PrinterInfo } from './api'
-import { amsName, errorCode, profileName, slotLabel, stateKey } from './format'
+import type { PrinterInfo, Status } from './api'
+import { amsName, errorCode, profileName, slotLabel, stateKey, statusAlertKeys } from './format'
 
 describe('format', () => {
   it('writes print errors like Bambu does', () => {
@@ -28,5 +28,11 @@ describe('format', () => {
     expect(stateKey(printer(false, 'RUNNING'))).toBe('OFFLINE')
     expect(stateKey(printer(true, 'RUNNING'))).toBe('RUNNING')
     expect(stateKey(printer(true, 'SLICING'))).toBe('unknown')
+  })
+
+  it('names the alerts as the server does', () => {
+    const s = { printError: 0x07008011, hms: ['0700_8000_0002_0011'] } as Status
+    expect(statusAlertKeys(s)).toEqual(['error:0700_8011', 'hms:0700_8000_0002_0011'])
+    expect(statusAlertKeys({ printError: 0, hms: [] } as unknown as Status)).toEqual([])
   })
 })

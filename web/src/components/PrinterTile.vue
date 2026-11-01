@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { thumbnailUrl, type PrinterInfo } from '../api'
-import { ACTIVE_STATES, useFormat } from '../format'
+import { ACTIVE_STATES, statusAlertKeys, useFormat } from '../format'
 import { stageName } from '../locales/stages'
 import StateTag from './StateTag.vue'
 
@@ -15,11 +15,16 @@ const stage = computed(() => (active.value ? stageName(status.value.stage, local
 
 // Alerts of a connected printer, shown as one icon in the colour of the most
 // severe; the printer view describes them.
-const alertCount = computed(() => (props.printer.online ? (status.value.printError ? 1 : 0) + status.value.hms.length : 0))
+// Alerts someone has read and dismissed are left out.
+const unread = computed(() => {
+  const dismissed = new Set(props.printer.dismissedAlerts ?? [])
+  return statusAlertKeys(status.value).filter((k) => !dismissed.has(k))
+})
+const alertCount = computed(() => (props.printer.online ? unread.value.length : 0))
 const alertLevel = computed(() => {
   // The third part of an HMS code is its severity: 1 fatal, 2 serious, 3 common, 4 info.
-  const levels = status.value.hms.map((code) => parseInt(code.split('_')[2] ?? '', 16))
-  if (status.value.printError || levels.some((l) => l === 1 || l === 2)) {
+  const levels = unread.value.filter((k) => k.startsWith('hms:')).map((k) => parseInt(k.split('_')[2] ?? '', 16))
+  if (unread.value.some((k) => k.startsWith('error:')) || levels.some((l) => l === 1 || l === 2)) {
     return 'error'
   }
   return levels.every((l) => l === 4) ? 'info' : 'warning'

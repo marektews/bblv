@@ -125,6 +125,7 @@ func (p *Printer) infoLocked() Info {
 	if !p.online {
 		info.ConnectionError = p.connErr
 	}
+	info.DismissedAlerts = p.m.dismissed.list(p.id)
 	if err := p.cameraErrLocked(); err != nil {
 		info.CameraError, info.CameraDetail = camera.Code(err), err.Error()
 	}
@@ -200,6 +201,8 @@ func (p *Printer) onStatus(ctx context.Context, s printer.Status) {
 	}
 	p.online = true
 	p.status, p.reported = s, true
+	// An alert dismissed and gone shows again when it comes back.
+	p.m.dismissed.retain(p.id, alertKeys(s))
 	j := p.nextJob(s)
 	info := p.infoLocked()
 	p.mu.Unlock()

@@ -71,7 +71,9 @@ type Info struct {
 	CameraError  string `json:"cameraError,omitempty"`  // camera.Code of why the camera does not work
 	CameraDetail string `json:"cameraDetail,omitempty"` // the error message
 	// ConnectionError tells why an offline printer cannot be reached.
-	ConnectionError string         `json:"connectionError,omitempty"`
+	ConnectionError string `json:"connectionError,omitempty"`
+	// DismissedAlerts are the alerts of Status someone has hidden.
+	DismissedAlerts []string       `json:"dismissedAlerts"`
 	Status          printer.Status `json:"status"`
 	Geometry        Geometry       `json:"geometry"`
 }
@@ -92,6 +94,7 @@ type Monitor struct {
 	filaments filamentNames
 	trust     *trust.Store // checks the printers' certificates; nil accepts any
 	onNotice  func(notify.Event)
+	dismissed dismissedAlerts
 
 	mu       sync.Mutex
 	ctx      context.Context // set by Run; printers added later start at once
@@ -152,6 +155,41 @@ func (m *Monitor) geometryKeys() []string {
 // from path, where the names learned from now on are saved too.
 func (m *Monitor) KeepFilamentNames(path string) error {
 	return m.filaments.load(path)
+}
+
+// KeepDismissedAlerts loads the alerts dismissed before from path, where
+// they are saved from now on too.
+func (m *Monitor) KeepDismissedAlerts(path string) error {
+	return m.dismissed.load(path)
+}
+
+// DismissAlerts hides alerts of a printer, keys like "hms:0300_0100_0001_0007"
+// or "error:0700_8011", until it stops reporting them; RestoreAlerts shows
+// them again.
+func (m *Monitor) DismissAlerts(id string, keys []string) error {
+	p := m.find(id)
+	if p == nil {
+		return ErrUnknownPrinter
+	}
+	p.mu.Lock()
+	current := alertKeys(p.status)
+	p.mu.Unlock()
+	if m.dismissed.dismiss(id, keys, current) {
+		p.publish(p.info())
+	}
+	return nil
+}
+
+// RestoreAlerts shows dismissed alerts of a printer again.
+func (m *Monitor) RestoreAlerts(id string, keys []string) error {
+	p := m.find(id)
+	if p == nil {
+		return ErrUnknownPrinter
+	}
+	if m.dismissed.restore(id, keys) {
+		p.publish(p.info())
+	}
+	return nil
 }
 
 // learnFilaments remembers the filament profiles of a print and, when they
@@ -215,6 +253,7 @@ func (m *Monitor) SyncPrinters(cfgs []config.Printer) {
 	}
 	for _, p := range removed {
 		p.close()
+		m.dismissed.retain(p.id, nil)
 		m.publish(Event{Type: "removed", Info: Info{ID: p.id}})
 	}
 	for _, p := range changed {
