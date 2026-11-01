@@ -12,11 +12,13 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/marektews/bblv/internal/cache"
 	"github.com/marektews/bblv/internal/camera"
 	"github.com/marektews/bblv/internal/config"
 	"github.com/marektews/bblv/internal/gcode"
+	"github.com/marektews/bblv/internal/notify"
 	"github.com/marektews/bblv/internal/printer"
 	"github.com/marektews/bblv/internal/printjob"
 	"github.com/marektews/bblv/internal/recording"
@@ -73,10 +75,12 @@ type Info struct {
 }
 
 // Event is sent to subscribers: Type "printer" carries the current info of
-// a printer, Type "removed" only its ID.
+// a printer, Type "removed" only its ID and Type "notification" Notice,
+// something that happened to a printer worth telling.
 type Event struct {
-	Type string
-	Info Info
+	Type   string
+	Info   Info
+	Notice *notify.Event
 }
 
 // Monitor tracks a set of printers.
@@ -85,6 +89,7 @@ type Monitor struct {
 	ffmpeg    string
 	filaments filamentNames
 	trust     *trust.Store // checks the printers' certificates; nil accepts any
+	onNotice  func(notify.Event)
 
 	mu       sync.Mutex
 	ctx      context.Context // set by Run; printers added later start at once
@@ -107,6 +112,22 @@ func New(store *cache.Cache, ffmpeg string) *Monitor {
 // certificates against cas. It has to be called before printers are added.
 func (m *Monitor) TrustPrinters(cas *trust.Store) {
 	m.trust = cas
+}
+
+// OnNotice sets a function called with every notification, besides the
+// subscribers, e.g. to send it to ntfy. It has to be called before Run and
+// must not block.
+func (m *Monitor) OnNotice(f func(notify.Event)) {
+	m.onNotice = f
+}
+
+// notice tells the subscribers and OnNotice what happened to a printer.
+func (m *Monitor) notice(e notify.Event) {
+	e.ID = time.Now().UnixNano()
+	m.publish(Event{Type: "notification", Notice: &e})
+	if m.onNotice != nil {
+		m.onNotice(e)
+	}
 }
 
 // geometryKeys returns the cache keys of the geometry the printers show,
@@ -222,6 +243,8 @@ func (m *Monitor) applyLocked(old *Printer, cfg config.Printer) *Printer {
 		if old.geom.State == GeometryReady {
 			p.geom, p.job = old.geom, old.job
 		}
+		// A print that finished while the printer moved is still told.
+		p.status, p.reported = old.status, old.reported
 		old.mu.Unlock()
 	}
 	return p

@@ -13,6 +13,7 @@ import (
 	"github.com/marektews/bblv/internal/camera"
 	"github.com/marektews/bblv/internal/config"
 	"github.com/marektews/bblv/internal/ftps"
+	"github.com/marektews/bblv/internal/notify"
 	"github.com/marektews/bblv/internal/printer"
 	"github.com/marektews/bblv/internal/printjob"
 	"github.com/marektews/bblv/internal/recording"
@@ -47,6 +48,7 @@ type Printer struct {
 	online      bool
 	connErr     string // why the last connection attempt failed
 	status      printer.Status
+	reported    bool // status comes from a report, which the next one is compared with
 	geom        Geometry
 	job         string // print the geometry belongs to
 	fetching    bool
@@ -189,12 +191,23 @@ func (p *Printer) onStatus(ctx context.Context, s printer.Status) {
 		p.mu.Unlock()
 		return
 	}
+	// The first report after the server started tells nothing new; one
+	// after the connection came back tells, e.g., that the print finished
+	// meanwhile.
+	var notice *notify.Event
+	if p.reported {
+		notice = notify.Detect(p.status, s)
+	}
 	p.online = true
-	p.status = s
+	p.status, p.reported = s, true
 	j := p.nextJob(s)
 	info := p.infoLocked()
 	p.mu.Unlock()
 	p.publish(info)
+	if notice != nil && !p.removed.Load() {
+		notice.Printer, notice.Name, notice.Serial = info.ID, info.Name, p.cfg.Serial
+		p.m.notice(*notice)
+	}
 	if j != nil {
 		// Called while the printer runs, so the monitor is not yet waiting
 		// for its goroutines to end.

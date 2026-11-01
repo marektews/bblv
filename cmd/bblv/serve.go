@@ -23,6 +23,7 @@ import (
 	"github.com/marektews/bblv/internal/config"
 	"github.com/marektews/bblv/internal/discovery"
 	"github.com/marektews/bblv/internal/monitor"
+	"github.com/marektews/bblv/internal/notify"
 	"github.com/marektews/bblv/internal/printjob"
 	"github.com/marektews/bblv/internal/relocate"
 	"github.com/marektews/bblv/internal/server"
@@ -99,6 +100,10 @@ func serve(ctx context.Context, o serveOptions) error {
 		slog.Error("printer CAs not loaded", "err", err)
 	}
 	mon.TrustPrinters(cas)
+	// Notifications reach the open pages with the events and, when set up,
+	// an ntfy topic, which the ntfy app shows on a phone.
+	ntfy := notify.NewNtfy(func() config.Ntfy { return cfgStore.Get().Ntfy })
+	mon.OnNotice(ntfy.Send)
 	if err = mon.KeepFilamentNames(filepath.Join(o.dataDir, "filaments.json")); err != nil {
 		slog.Warn("filament names not loaded", "err", err)
 	}
@@ -137,6 +142,7 @@ func serve(ctx context.Context, o serveOptions) error {
 		mon.Run(ctx)
 		close(monitorDone)
 	}()
+	go ntfy.Run(ctx)
 	disc := discovery.Listen(ctx)
 	if o.replay == "" {
 		// Follows printers that got another address from DHCP.

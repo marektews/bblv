@@ -222,7 +222,45 @@ export interface AppConfig {
   printers: PrinterConfig[]
   passwordSet: boolean
   studioConfig: { path: string; found: boolean }
+  ntfy: NtfyConfig
 }
+
+// Kinds of notifications, the most important first (internal/notify).
+export const NOTICE_KINDS = ['failed', 'pause', 'finish', 'hms'] as const
+export type NoticeKind = (typeof NOTICE_KINDS)[number]
+
+// Notice is something that happened to a printer worth telling, from the
+// "notification" event.
+export interface Notice {
+  id: number
+  kinds: NoticeKind[]
+  printerId: string
+  printerName: string
+  subtask?: string
+  codes?: { kind: 'hms' | 'error'; code: string }[]
+}
+
+export interface NtfyConfig {
+  url: string
+  topic: string // "" when ntfy is off
+  hasToken: boolean
+  events: NoticeKind[]
+  lang: string
+  link: string
+}
+
+export interface NtfyInput {
+  url: string
+  topic: string
+  token: string // empty keeps the current token
+  clearToken: boolean
+  events: NoticeKind[]
+  lang: string
+  link: string
+}
+
+export const setNtfy = (n: NtfyInput) => request<NtfyConfig>('PUT', '/api/config/ntfy', n)
+export const testNtfy = () => request<void>('POST', '/api/config/ntfy/test')
 
 export interface DiscoveredPrinter {
   serial: string

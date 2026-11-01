@@ -1,5 +1,12 @@
 import { reactive, ref, watch } from 'vue'
-import { getAuth, setUnauthorizedHandler, type PrinterInfo } from './api'
+import { getAuth, setUnauthorizedHandler, type Notice, type PrinterInfo } from './api'
+
+// noticeHandler shows the notifications; main.ts sets it.
+let noticeHandler = (_n: Notice) => {}
+
+export function setNoticeHandler(f: (n: Notice) => void) {
+  noticeHandler = f
+}
 
 // Printers in configuration order, kept up to date by the server's event stream.
 export const printers = ref<PrinterInfo[]>([])
@@ -97,6 +104,9 @@ function connectEvents() {
     } else {
       printers.value.push(info)
     }
+  })
+  es.addEventListener('notification', (e) => {
+    noticeHandler(JSON.parse((e as MessageEvent<string>).data) as Notice)
   })
   es.addEventListener('removed', (e) => {
     const { id } = JSON.parse((e as MessageEvent<string>).data) as { id: string }

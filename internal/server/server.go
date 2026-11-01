@@ -60,12 +60,13 @@ func streamDeadlines(w http.ResponseWriter) (set, reset func()) {
 }
 
 type server struct {
-	mon     *monitor.Monitor
-	cfg     *config.Store
-	auth    *auth.Auth
-	disc    *discovery.Listener
-	hosts   []string
-	version string
+	mon        *monitor.Monitor
+	cfg        *config.Store
+	auth       *auth.Auth
+	disc       *discovery.Listener
+	hosts      []string
+	version    string
+	ntfyClient *http.Client // sends test notifications
 }
 
 // Deps are the services used by the handlers.
@@ -82,7 +83,7 @@ type Deps struct {
 
 // New returns the HTTP handler of the application.
 func New(d Deps) http.Handler {
-	s := &server{mon: d.Monitor, cfg: d.Config, auth: d.Auth, disc: d.Discovery, version: d.Version}
+	s := &server{mon: d.Monitor, cfg: d.Config, auth: d.Auth, disc: d.Discovery, version: d.Version, ntfyClient: &http.Client{}}
 	for _, h := range d.AllowedHosts {
 		s.hosts = append(s.hosts, normalizeHost(h))
 	}
@@ -97,6 +98,8 @@ func New(d Deps) http.Handler {
 	mux.HandleFunc("GET /api/config/discovered", s.discovered)
 	mux.HandleFunc("POST /api/config/import-codes", s.importCodes)
 	mux.HandleFunc("PUT /api/config/password", s.setPassword)
+	mux.HandleFunc("PUT /api/config/ntfy", s.setNtfy)
+	mux.HandleFunc("POST /api/config/ntfy/test", s.testNtfy)
 	mux.HandleFunc("GET /api/printers", s.printers)
 	mux.HandleFunc("GET /api/printers/{id}", s.printer)
 	mux.HandleFunc("GET /api/printers/{id}/geometry", s.geometry)
@@ -229,8 +232,7 @@ func (s *server) alerts(w http.ResponseWriter, r *http.Request) {
 	}
 	out := []alert{}
 	if e := info.Status.PrintError; e != 0 {
-		code := fmt.Sprintf("%08X", uint32(e))
-		code = code[:4] + "_" + code[4:]
+		code := hms.ErrorCode(e)
 		out = append(out, alert{Kind: hms.KindError, Code: code, Text: hms.Text(lang, serial, hms.KindError, code), URL: hms.HelpURL(lang, serial, hms.KindError, code)})
 	}
 	for _, h := range info.Status.HMS {
@@ -394,8 +396,10 @@ func (s *server) upload(w http.ResponseWriter, r *http.Request) {
 
 // events streams Server-Sent Events: on connect a "version" event with the
 // server version, then a "printer" event with the printer info
-// for every printer on connect and after every change, and a "removed" event
-// with the id of a printer that is no longer configured. A "ready" event with
+// for every printer on connect and after every change, a "removed" event
+// with the id of a printer that is no longer configured and a "notification"
+// event with a notify.Event when a print ended or a printer needs
+// attention, which the page may show. A "ready" event with
 // the ids in configuration order follows the printers sent on connect, so that
 // a client reconnecting drops those removed meanwhile.
 func (s *server) events(w http.ResponseWriter, r *http.Request) {
@@ -416,8 +420,11 @@ func (s *server) events(w http.ResponseWriter, r *http.Request) {
 	deadline() // for the whole state sent on connect
 	emit := func(e monitor.Event) error {
 		var data any = e.Info
-		if e.Type == "removed" {
+		switch e.Type {
+		case "removed":
 			data = map[string]string{"id": e.Info.ID}
+		case "notification":
+			data = e.Notice
 		}
 		b, err := json.Marshal(data)
 		if err != nil {

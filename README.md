@@ -244,6 +244,32 @@ uploaded, and keeps them in `filaments.json` in the data directory; the
 slots of every printer are then named. A slot whose profile has never
 appeared in a print file shows no profile name.
 
+## Notifications
+
+bblv tells when a print finishes, fails or is paused (e.g. out of filament)
+and when a new HMS alert or print error appears, with its description. It
+compares consecutive reports, so nothing is told for the state found at
+start-up, but a print that finished while the printer was out of reach is.
+Both kinds are set up in **Settings**:
+
+- **In this browser**: a system notification while the bblv tab is open in
+  the background, or a message on the page while it is visible. Every
+  browser agrees to notifications itself, so the setting is per device.
+  On phones the browser cannot show system notifications with bblv's
+  self-signed certificate (Chrome on Android needs a service worker for
+  them, which an untrusted certificate keeps from running; iPhones only
+  notify for apps on the home screen); use ntfy there.
+- **On your phone with [ntfy](https://ntfy.sh)**: the server sends every
+  notification to an ntfy topic, and the ntfy app shows it also while no
+  page of bblv is open. Install the app, subscribe to the topic shown in
+  the settings (generate a random one: on ntfy.sh, whoever knows a topic
+  can read it) and choose the events, the language and the address of bblv
+  a notification opens. A self-hosted ntfy server and an access token for a
+  protected topic work too; like the access codes, the token is never sent
+  back to the browser and has to be entered again when the server changes.
+  The notifications, with the names of the printer and the print, leave
+  your network for the ntfy server.
+
 ## How the 3D view gets the G-code
 
 When a print starts, bblv downloads the print file from the printer's SD

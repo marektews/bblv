@@ -81,6 +81,10 @@ Stan (przygotowanie/druk/pauza/koniec/błąd), %, warstwa X/Y, pozostały czas +
 
 **Kamera:** panel nad parametrami, zwijany (stan w `localStorage`). Pełny ekran przyciskiem w rogu obrazu lub podwójnym kliknięciem (Fullscreen API na tym samym `<img>`, więc strumień się nie przerywa); wyjście tym samym przyciskiem lub Esc. Bez Fullscreen API (iPhone) obraz wypełnia okno przeglądarki.
 
+**Powiadomienia (`internal/notify`):** serwer porównuje kolejne stany drukarki (`notify.Detect`; pierwszy raport po starcie nie jest porównywany, po ponownym połączeniu tak, przy zmianie adresu drukarki stan przechodzi na nową): `failed` (stan aktywny → FAILED), `pause` (PREPARE/RUNNING → PAUSE), `finish` (aktywny → FINISH), `hms` (nowy kod HMS albo nowy `print_error`; alert, który trwa, tylko raz). Jedno zdarzenie może mieć kilka rodzajów (np. pauza + alert przy końcu filamentu). Odbiorcy:
+- Przeglądarka: zdarzenie SSE `notification` (`{id, kinds, printerId, printerName, subtask, codes}`); ustawienia w `localStorage` (każde urządzenie osobno zgadza się na powiadomienia). Karta widoczna → `ElNotification` na stronie, w tle → `Notification` systemowe (tag z `id`, karty uzgadniają przez `BroadcastChannel`, żeby nie dublować). Opisy alertów z `/api/printers/{id}/alerts`. Telefony: Chrome na Androidzie wymaga service workera (nie działa przy niezaufanym certyfikacie), iPhone tylko PWA — tam ntfy.
+- ntfy: `config.json` → `ntfy {url, topic, token, events, lang, link}`; publikacja JSON na adres serwera (polskie znaki w tytule), priorytet 4 dla pauzy, nieudanego wydruku i alertów fatal/serious, tagi jako emoji, link do strony drukarki. Kolejka 32 zdarzeń, jeden wysyłający, 10 s na wiadomość. Token nie wraca do przeglądarki; zmiana serwera wymaga ponownego wpisania tokenu (jak Access Code).
+
 **Etapy (`stg_cur`):** nazwy PL/EN dla 78 numerów wg listy ha-bambulab (`web/src/locales/stages.ts`); 0 = drukowanie i -1/255 = bezczynna nie są pokazywane. Etap widoczny w panelu i na kafelku w trakcie wydruku.
 
 ## 5. Serwer HTTP / API
@@ -90,7 +94,7 @@ Stan (przygotowanie/druk/pauza/koniec/błąd), %, warstwa X/Y, pozostały czas +
 | GET | `/api/printers` | wszystkie drukarki, pełny opis jak w zdarzeniu `printer` |
 | GET | `/api/printers/{id}` | jedna drukarka |
 | GET | `/api/printers/{id}/alerts?lang=pl\|en` | alerty HMS i błąd wydruku z opisami i linkami do wiki |
-| GET | `/api/events` | SSE: po połączeniu `version` (wersja serwera; inna niż przy poprzednim połączeniu = strona się przeładowuje, w ustawieniach pokazuje pasek), potem zdarzenie `printer` z pełnym opisem drukarki (`id`, `name`, `model`, `experimental`, `online`, `status`, `geometry`) — po połączeniu dla każdej drukarki, potem przy każdej zmianie; nowy `geometry.key` = przeładuj geometrię; `ready` z listą id po drukarkach wysłanych przy połączeniu; `removed` z id usuniętej. Klient, który nie nadąża (64 zdarzenia), jest rozłączany i łączy się ponownie |
+| GET | `/api/events` | SSE: po połączeniu `version` (wersja serwera; inna niż przy poprzednim połączeniu = strona się przeładowuje, w ustawieniach pokazuje pasek), potem zdarzenie `printer` z pełnym opisem drukarki (`id`, `name`, `model`, `experimental`, `online`, `status`, `geometry`) — po połączeniu dla każdej drukarki, potem przy każdej zmianie; nowy `geometry.key` = przeładuj geometrię; `ready` z listą id po drukarkach wysłanych przy połączeniu; `removed` z id usuniętej; `notification` z powiadomieniem (rozdz. 4). Klient, który nie nadąża (64 zdarzenia), jest rozłączany i łączy się ponownie |
 | GET | `/api/printers/{id}/geometry` | geometria binarna (z cache), gzip, `ETag` = `geometry.key` |
 | GET | `/api/printers/{id}/thumbnail` | miniatura z `.3mf` |
 | GET | `/api/printers/{id}/camera` | MJPEG (`multipart/x-mixed-replace`); `camera: true` w opisie drukarki, gdy dostępna |
@@ -102,6 +106,8 @@ Stan (przygotowanie/druk/pauza/koniec/błąd), %, warstwa X/Y, pozostały czas +
 | GET | `/api/config/discovered` | drukarki wykryte przez SSDP + `configuredAs` |
 | POST | `/api/config/import-codes` | kody z `BambuStudio.conf` (wgrany plik albo lokalny) dla drukarek o pasującym numerze seryjnym |
 | PUT | `/api/config/password` | `{current, password}`; puste hasło = usunięcie |
+| PUT | `/api/config/ntfy` | `{url, topic, token, clearToken, events, lang, link}`; pusty temat = ntfy wyłączone, pusty token = bez zmiany; odpowiedź bez tokenu (`hasToken`) |
+| POST | `/api/config/ntfy/test` | powiadomienie testowe z zapisanymi ustawieniami (409 przy wyłączonym ntfy, 502 z błędem serwera ntfy) |
 | POST | `/api/login`, `/api/logout` | sesja (gdy ustawione hasło); 429 + `Retry-After` po błędnych próbach; wylogowanie unieważnia sesję |
 
 Stany `geometry.state`: `none`, `loading`, `ready`, `missing` (brak plików na karcie → upload), `error`. Przy `missing`/`error` w trakcie wydruku serwer ponawia pobranie co 30 s (max 10 razy) — drukarka może jeszcze pobierać plik.
@@ -139,7 +145,7 @@ Widok 3D: bez WebGL komunikat zamiast sceny; przy utracie kontekstu komunikat, p
 ## 7. Dane
 Katalog danych: domyślnie `%ProgramData%\bblv` (Windows) / `/var/lib/bblv` (Linux), nadpisywany flagą `--data`.
 ```
-config.json     drukarki, hash hasła — zapis atomowy, uprawnienia 0600
+config.json     drukarki, hash hasła, ustawienia ntfy — zapis atomowy, uprawnienia 0600
 cache/          geometria + miniatury
 recordings/     nagrania MQTT (.jsonl)
 filaments.json  nazwy profili filamentów z plików wydruków

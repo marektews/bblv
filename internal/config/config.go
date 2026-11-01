@@ -37,6 +37,18 @@ type Config struct {
 	// a hash of the cookie and its expiry unix time.
 	RevokedSessions map[string]int64 `json:"revoked_sessions,omitempty"`
 	Printers        []Printer        `json:"printers"`
+	Ntfy            Ntfy             `json:"ntfy,omitzero"`
+}
+
+// Ntfy is where notifications go besides the browsers: an ntfy topic, which
+// the ntfy app shows on a phone also while no page of bblv is open.
+type Ntfy struct {
+	URL    string   `json:"url,omitempty"`    // of the server, e.g. https://ntfy.sh
+	Topic  string   `json:"topic,omitempty"`  // "" turns ntfy off
+	Token  string   `json:"token,omitempty"`  // access token of a protected topic
+	Events []string `json:"events,omitempty"` // kinds of notify events to send
+	Lang   string   `json:"lang,omitempty"`   // of the messages: pl or en
+	Link   string   `json:"link,omitempty"`   // address of bblv a notification opens, "" for none
 }
 
 // DefaultDataDir returns the OS specific default data directory.

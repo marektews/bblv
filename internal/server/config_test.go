@@ -7,6 +7,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/cookiejar"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -154,5 +155,61 @@ func TestCrossOriginChangesRejected(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusUnsupportedMediaType {
 		t.Fatalf("form-like post: %d", resp.StatusCode)
+	}
+}
+
+func TestNtfySettings(t *testing.T) {
+	ts, cfg := setupWithConfig(t)
+	c := ts.Client()
+	titles := make(chan string, 2)
+	ntfy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		titles <- r.Header.Get("Authorization") + " " + body["title"].(string)
+	}))
+	defer ntfy.Close()
+
+	var got struct {
+		Ntfy ntfyView `json:"ntfy"`
+	}
+	json.NewDecoder(send(t, c, "GET", ts.URL+"/api/config", nil).Body).Decode(&got)
+	if got.Ntfy.URL != "https://ntfy.sh" || got.Ntfy.Topic != "" || len(got.Ntfy.Events) != 4 {
+		t.Fatalf("defaults: %+v", got.Ntfy)
+	}
+	if r := send(t, c, "POST", ts.URL+"/api/config/ntfy/test", nil); r.StatusCode != http.StatusConflict {
+		t.Fatalf("test while off: %d", r.StatusCode)
+	}
+	if r := send(t, c, "PUT", ts.URL+"/api/config/ntfy", map[string]any{"topic": "a/b", "events": []string{"finish"}, "lang": "pl"}); r.StatusCode != http.StatusBadRequest {
+		t.Fatalf("bad topic: %d", r.StatusCode)
+	}
+
+	in := map[string]any{"url": ntfy.URL + "/", "topic": "bblv-x", "token": "tk_1", "events": []string{"finish", "nonsense"}, "lang": "pl", "link": "https://pc:8443/"}
+	resp := send(t, c, "PUT", ts.URL+"/api/config/ntfy", in)
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 || strings.Contains(string(raw), "tk_1") || !strings.Contains(string(raw), `"hasToken":true`) {
+		t.Fatalf("save: %d %s", resp.StatusCode, raw)
+	}
+	if n := cfg.Get().Ntfy; n.Token != "tk_1" || n.URL != ntfy.URL || n.Link != "https://pc:8443" || len(n.Events) != 1 {
+		t.Fatalf("saved %+v", n)
+	}
+	if r := send(t, c, "POST", ts.URL+"/api/config/ntfy/test", nil); r.StatusCode != http.StatusNoContent {
+		t.Fatalf("test: %d", r.StatusCode)
+	}
+	if title := <-titles; title != "Bearer tk_1 bblv: powiadomienie testowe" {
+		t.Fatalf("test sent %q", title)
+	}
+
+	// The token stays with its server: another one needs it again.
+	delete(in, "token")
+	if r := send(t, c, "PUT", ts.URL+"/api/config/ntfy", in); r.StatusCode != 200 || cfg.Get().Ntfy.Token != "tk_1" {
+		t.Fatalf("save without token: %d", r.StatusCode)
+	}
+	in["url"] = "https://ntfy.example.com"
+	if r := send(t, c, "PUT", ts.URL+"/api/config/ntfy", in); r.StatusCode != http.StatusBadRequest || cfg.Get().Ntfy.URL != ntfy.URL {
+		t.Fatalf("other server kept the token: %d", r.StatusCode)
+	}
+	in["clearToken"] = true
+	if r := send(t, c, "PUT", ts.URL+"/api/config/ntfy", in); r.StatusCode != 200 || cfg.Get().Ntfy.Token != "" {
+		t.Fatalf("clear token: %d %+v", r.StatusCode, cfg.Get().Ntfy)
 	}
 }

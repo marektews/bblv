@@ -1,6 +1,7 @@
 package server
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,7 +10,10 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +22,7 @@ import (
 	"github.com/marektews/bblv/internal/bambustudio"
 	"github.com/marektews/bblv/internal/config"
 	"github.com/marektews/bblv/internal/discovery"
+	"github.com/marektews/bblv/internal/notify"
 )
 
 // printerView is a configured printer as shown to the browser; the access
@@ -107,6 +112,7 @@ func (s *server) getConfig(w http.ResponseWriter, r *http.Request) {
 		"printers":     printers,
 		"passwordSet":  c.PasswordHash != "",
 		"studioConfig": map[string]any{"path": path, "found": err == nil},
+		"ntfy":         ntfyViewOf(c.Ntfy),
 	})
 }
 
@@ -353,7 +359,7 @@ func (s *server) configError(w http.ResponseWriter, err error) bool {
 		return false
 	case errors.Is(err, errDuplicateSerial):
 		writeError(w, http.StatusConflict, err.Error())
-	case errors.Is(err, errCodeForSerial):
+	case errors.Is(err, errCodeForSerial), errors.Is(err, errTokenForServer):
 		writeError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, config.ErrNotFound):
 		writeError(w, http.StatusNotFound, err.Error())
@@ -378,4 +384,120 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 		return false
 	}
 	return true
+}
+
+// ntfyView is the ntfy configuration as shown to the browser; like the
+// access codes, the token never leaves the server.
+type ntfyView struct {
+	URL      string   `json:"url"`
+	Topic    string   `json:"topic"`
+	HasToken bool     `json:"hasToken"`
+	Events   []string `json:"events"`
+	Lang     string   `json:"lang"`
+	Link     string   `json:"link"`
+}
+
+func ntfyViewOf(n config.Ntfy) ntfyView {
+	n = notify.WithDefaults(n)
+	return ntfyView{URL: n.URL, Topic: n.Topic, HasToken: n.Token != "", Events: n.Events, Lang: n.Lang, Link: n.Link}
+}
+
+type ntfyInput struct {
+	URL        string   `json:"url"`
+	Topic      string   `json:"topic"`
+	Token      string   `json:"token"`      // empty keeps the current token
+	ClearToken bool     `json:"clearToken"` // removes it
+	Events     []string `json:"events"`
+	Lang       string   `json:"lang"`
+	Link       string   `json:"link"`
+}
+
+// errTokenForServer refuses to give the ntfy token to another server.
+var errTokenForServer = errors.New("enter the token again when changing the ntfy server")
+
+var ntfyTopic = regexp.MustCompile(`^[-_A-Za-z0-9]{1,64}$`)
+
+// webAddress checks an http or https address without a query and returns
+// it without a final slash.
+func webAddress(s string) (string, bool) {
+	u, err := url.Parse(s)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return "", false
+	}
+	return strings.TrimSuffix(s, "/"), true
+}
+
+// settings checks the input and returns the configuration without the token.
+func (in ntfyInput) settings() (config.Ntfy, error) {
+	n := config.Ntfy{Topic: strings.TrimSpace(in.Topic), Lang: in.Lang, Events: []string{}}
+	if n.Topic != "" && !ntfyTopic.MatchString(n.Topic) {
+		return n, errors.New("the topic may only have letters, digits, - and _, at most 64")
+	}
+	var ok bool
+	if n.URL, ok = webAddress(cmp.Or(strings.TrimSpace(in.URL), notify.DefaultNtfyURL)); !ok {
+		return n, errors.New("the ntfy server must be an http or https address")
+	}
+	if link := strings.TrimSpace(in.Link); link != "" {
+		if n.Link, ok = webAddress(link); !ok {
+			return n, errors.New("the address of bblv must be an http or https address")
+		}
+	}
+	for _, k := range notify.Kinds {
+		if slices.Contains(in.Events, k) {
+			n.Events = append(n.Events, k)
+		}
+	}
+	if n.Topic != "" && len(n.Events) == 0 {
+		return n, errors.New("choose at least one event")
+	}
+	if n.Lang != "pl" && n.Lang != "en" {
+		return n, errors.New("the language must be pl or en")
+	}
+	return n, nil
+}
+
+func (s *server) setNtfy(w http.ResponseWriter, r *http.Request) {
+	var in ntfyInput
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	n, err := in.settings()
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	err = s.cfg.Update(func(c *config.Config) error {
+		old := notify.WithDefaults(c.Ntfy)
+		switch {
+		case strings.TrimSpace(in.Token) != "":
+			n.Token = strings.TrimSpace(in.Token)
+		case in.ClearToken:
+		case old.Token != "" && old.URL != n.URL:
+			return errTokenForServer
+		default:
+			n.Token = old.Token
+		}
+		c.Ntfy = n
+		return nil
+	})
+	if s.configError(w, err) {
+		return
+	}
+	writeJSON(w, ntfyViewOf(n))
+}
+
+// testNtfy sends a test notification with the saved settings.
+func (s *server) testNtfy(w http.ResponseWriter, r *http.Request) {
+	n := notify.WithDefaults(s.cfg.Get().Ntfy)
+	if n.Topic == "" {
+		writeError(w, http.StatusConflict, "ntfy is not set up")
+		return
+	}
+	m := notify.TestMessage(n.Lang)
+	m.Click = n.Link
+	if err := notify.Publish(r.Context(), s.ntfyClient, n, m); err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

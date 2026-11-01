@@ -5,6 +5,7 @@ package hms
 
 import (
 	"embed"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"strings"
@@ -79,6 +80,12 @@ func HelpURL(lang, serial, kind, code string) string {
 		q.Set("d", p)
 	}
 	return "https://e.bambulab.com/index.php?" + q.Encode()
+}
+
+// ErrorCode formats a print_error the way Bambu documents it, e.g. 0700_8011.
+func ErrorCode(e int) string {
+	code := fmt.Sprintf("%08X", uint32(e))
+	return code[:4] + "_" + code[4:]
 }
 
 // Severity returns the level encoded in the code part of an HMS entry.

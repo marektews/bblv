@@ -65,6 +65,7 @@ func (s *Store) Update(fn func(c *Config) error) error {
 func (c Config) clone() Config {
 	c.Printers = slices.Clone(c.Printers)
 	c.RevokedSessions = maps.Clone(c.RevokedSessions)
+	c.Ntfy.Events = slices.Clone(c.Ntfy.Events)
 	return c
 }
 

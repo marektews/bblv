@@ -15,6 +15,7 @@ import {
   type PrinterConfig,
   type PrinterInput,
 } from '../api'
+import NotificationSettings from '../components/NotificationSettings.vue'
 import PrinterDialog from '../components/PrinterDialog.vue'
 import { auth, printers, serverVersion } from '../store'
 
@@ -273,6 +274,8 @@ async function changePassword(unset = false) {
         <input ref="confFile" type="file" accept=".conf" hidden @change="onConfFile" />
       </div>
     </section>
+
+    <NotificationSettings :ntfy="config?.ntfy" />
 
     <section>
       <h3><fa-icon icon="lock" class="ic" />{{ t('settings.password') }}</h3>
