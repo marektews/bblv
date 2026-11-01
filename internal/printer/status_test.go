@@ -141,3 +141,25 @@ func TestStatusAMSEnvironmentSpoolsAndMapping(t *testing.T) {
 		t.Errorf("humidity without a sensor = %d", h)
 	}
 }
+
+// The state is complete once a report told the printer's state and alerts.
+func TestStateComplete(t *testing.T) {
+	s := NewState()
+	for _, c := range []struct {
+		payload string
+		want    bool
+	}{
+		{`{"info":{"command":"get_version","module":[]}}`, false},
+		{`{"print":{"command":"push_status","msg":1,"mc_percent":5}}`, false},
+		{`{"print":{"command":"push_status","msg":1,"gcode_state":"RUNNING"}}`, false},
+		{`{"print":{"command":"push_status","msg":0,"gcode_state":"RUNNING","hms":[]}}`, true},
+		{`{"print":{"command":"push_status","msg":1,"mc_percent":6}}`, true},
+	} {
+		if err := s.Apply([]byte(c.payload)); err != nil {
+			t.Fatal(err)
+		}
+		if got := s.Complete(); got != c.want {
+			t.Errorf("after %s: complete %v, want %v", c.payload, got, c.want)
+		}
+	}
+}

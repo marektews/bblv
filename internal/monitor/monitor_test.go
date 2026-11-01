@@ -72,6 +72,41 @@ func TestFetchOnNewPrintAndRetry(t *testing.T) {
 	eventually(t, func() bool { return p.info().Geometry.Key == "k2" })
 }
 
+// A print that begins while the files of the one before are still being
+// downloaded ends that download and has its own fetched right after.
+func TestNewPrintEndsTheDownloadBefore(t *testing.T) {
+	m := New(nil, "")
+	calls := make(chan job, 10)
+	p := newPrinter(m, "p", "", "A1", nil)
+	p.fetcher = func(ctx context.Context, j job) Geometry {
+		calls <- j
+		if j.subtask == "a" {
+			<-ctx.Done() // a long download
+			return Geometry{State: GeometryError, Error: ctx.Err().Error()}
+		}
+		return Geometry{State: GeometryReady, Key: "kb"}
+	}
+	m.add(p)
+
+	p.onStatus(t.Context(), printer.Status{State: "RUNNING", Subtask: "a", TaskID: "1"})
+	if j := <-calls; j.subtask != "a" {
+		t.Fatalf("job = %+v", j)
+	}
+	p.onStatus(t.Context(), printer.Status{State: "PREPARE", Subtask: "b", TaskID: "2"})
+	if g := p.info().Geometry; g.State != GeometryLoading || g.Subtask != "b" {
+		t.Fatalf("geometry while the download before ends: %+v", g)
+	}
+	select {
+	case j := <-calls:
+		if j.subtask != "b" {
+			t.Fatalf("job = %+v", j)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the new print was not fetched")
+	}
+	eventually(t, func() bool { g := p.info().Geometry; return g.Key == "kb" && g.Subtask == "b" })
+}
+
 func TestNoFetchWithoutSDCard(t *testing.T) {
 	m := New(nil, "")
 	calls := make(chan job, 10)

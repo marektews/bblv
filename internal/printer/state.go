@@ -29,6 +29,20 @@ func (s *State) Apply(payload []byte) error {
 	return nil
 }
 
+// Complete tells whether the state holds what the printer reports in full:
+// its state and its alerts. After connecting, the answer to get_version
+// comes first, and the A1 and P1 may send reports of only the changed
+// fields before the full one; a status taken before would tell no state
+// and no alerts.
+func (s *State) Complete() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p := obj(s.m, "print")
+	_, state := p["gcode_state"]
+	_, hms := p["hms"]
+	return state && hms
+}
+
 // Status returns a typed snapshot of the state.
 func (s *State) Status() Status {
 	s.mu.Lock()

@@ -52,6 +52,8 @@ type Printer struct {
 	geom        Geometry
 	job         string // print the geometry belongs to
 	fetching    bool
+	stopFetch   context.CancelFunc // ends the download in progress
+	stopped     bool               // run returned: no download starts any more
 	attempts    int
 	lastAttempt time.Time
 }
@@ -78,6 +80,11 @@ func displayName(id, name string) string {
 // of print files in progress.
 func (p *Printer) run(ctx context.Context) {
 	p.src.run(ctx, func(s printer.Status) { p.onStatus(ctx, s) }, p.onConnection)
+	// A report still being handled starts no download, which the monitor,
+	// waiting for the goroutines of its printers, would not wait for.
+	p.mu.Lock()
+	p.stopped = true
+	p.mu.Unlock()
 }
 
 // retire stops the printer after it was replaced; its camera passes on to
@@ -203,7 +210,7 @@ func (p *Printer) onStatus(ctx context.Context, s printer.Status) {
 	p.status, p.reported = s, true
 	// An alert dismissed and gone shows again when it comes back.
 	p.m.dismissed.retain(p.id, alertKeys(s))
-	j := p.nextJob(s)
+	p.fetchLocked(ctx, s)
 	info := p.infoLocked()
 	p.mu.Unlock()
 	p.publish(info)
@@ -211,30 +218,56 @@ func (p *Printer) onStatus(ctx context.Context, s printer.Status) {
 		notice.Printer, notice.Name, notice.Serial = info.ID, info.Name, p.cfg.Serial
 		p.m.notice(*notice)
 	}
-	if j != nil {
-		// Called while the printer runs, so the monitor is not yet waiting
-		// for its goroutines to end.
-		p.m.wg.Add(1)
-		go func() {
-			defer p.m.wg.Done()
-			p.fetch(ctx, *j)
-		}()
+}
+
+// fetchLocked starts fetching the geometry when nextJob says so. The
+// download runs until it is done, ctx ends or another print begins.
+func (p *Printer) fetchLocked(ctx context.Context, s printer.Status) {
+	if p.stopped {
+		return
 	}
+	j := p.nextJob(s)
+	if j == nil {
+		return
+	}
+	fctx, cancel := context.WithCancel(ctx)
+	p.stopFetch = cancel
+	// Added while the printer runs, so the monitor is not yet waiting for
+	// its goroutines to end.
+	p.m.wg.Add(1)
+	go func() {
+		defer p.m.wg.Done()
+		defer cancel()
+		p.fetch(ctx, fctx, *j)
+	}()
 }
 
 // nextJob decides whether the geometry has to be (re)fetched. A new print
-// resets the geometry; a print whose files were not found yet is retried
-// while it is active, because the printer may still be downloading them.
+// resets the geometry and ends the download for the print before; a print
+// whose files were not found yet is retried while it is active, because
+// the printer may still be downloading them.
 func (p *Printer) nextJob(s printer.Status) *job {
-	if p.fetcher == nil || s.Subtask == "" || p.fetching {
+	if p.fetcher == nil || s.Subtask == "" {
 		return nil
 	}
 	id := s.Subtask + "\x00" + s.TaskID
-	if id != p.job {
+	switch {
+	case id != p.job:
 		p.job = id
 		p.attempts = 0
 		p.geom = Geometry{State: GeometryLoading, Subtask: s.Subtask}
-	} else {
+		if p.fetching {
+			// The files of a print cancelled soon after it began could
+			// take half an hour; that download ends, and fetch then
+			// starts this one.
+			p.stopFetch()
+			return nil
+		}
+	case p.fetching:
+		return nil
+	case p.geom.State == GeometryLoading:
+		// Begun while the download for the print before was ending.
+	default:
 		failed := p.geom.State == GeometryMissing || p.geom.State == GeometryError
 		active := s.State == "PREPARE" || s.State == "RUNNING" || s.State == "PAUSE"
 		if !failed || !active || p.attempts >= maxAttempts || time.Since(p.lastAttempt) < retryInterval {
@@ -253,14 +286,18 @@ func (p *Printer) nextJob(s printer.Status) *job {
 	return &job{id: id, subtask: s.Subtask, gcodeFile: s.GcodeFile}
 }
 
-func (p *Printer) fetch(ctx context.Context, j job) {
-	g := p.fetcher(ctx, j)
+// fetch downloads the files of print j until fctx ends; ctx is that of the
+// printer, for the download of the print that began meanwhile.
+func (p *Printer) fetch(ctx, fctx context.Context, j job) {
+	g := p.fetcher(fctx, j)
 	g.Subtask = j.subtask
 	// Also when the print has changed meanwhile, its profiles name spools.
 	defer p.m.learnFilaments(g.Settings)
 	p.mu.Lock()
 	p.fetching = false
+	p.stopFetch = nil
 	if p.job != j.id || p.geom.Uploaded {
+		p.fetchLocked(ctx, p.status)
 		p.mu.Unlock()
 		return
 	}
@@ -274,7 +311,11 @@ func (p *Printer) fetch(ctx context.Context, j job) {
 // ctx does or when the printer stops sending for a while.
 func (p *Printer) fetchFTPS(ctx context.Context, j job) Geometry {
 	fail := func(err error) Geometry {
-		slog.Warn("geometry fetch failed", "printer", p.id, "print", j.subtask, "err", err)
+		level := slog.LevelWarn
+		if ctx.Err() != nil { // another print began, or the server stops
+			level = slog.LevelDebug
+		}
+		slog.Log(ctx, level, "geometry fetch failed", "printer", p.id, "print", j.subtask, "err", err)
 		return Geometry{State: GeometryError, Error: err.Error()}
 	}
 	conn, err := ftps.Dial(ctx, p.cfg.Host, p.cfg.AccessCode, p.m.trust.TLS(p.cfg.Serial).VerifyConnection)
@@ -364,7 +405,14 @@ func (s *mqttSource) report(err error) {
 
 func (s *mqttSource) run(ctx context.Context, status func(printer.Status), online func(bool)) {
 	var c *printer.Client
-	c = printer.New(s.cfg, s.cas, func(printer.Report) { status(c.Status()) })
+	c = printer.New(s.cfg, s.cas, func(printer.Report) {
+		// A status before the full report would tell no alerts, which
+		// would forget those dismissed, and the alerts of the full one
+		// as new.
+		if c.Complete() {
+			status(c.Status())
+		}
+	})
 	c.OnConnection(online)
 	s.client.Store(c)
 	defer s.client.Store(nil)
@@ -406,7 +454,7 @@ func (s *replaySource) run(ctx context.Context, status func(printer.Status), onl
 	online(true)
 	state := printer.NewState()
 	err := recording.Replay(ctx, s.path, s.speed, func(e recording.Entry) {
-		if e.Kind == "report" && state.Apply(e.Payload) == nil {
+		if e.Kind == "report" && state.Apply(e.Payload) == nil && state.Complete() {
 			status(state.Status())
 		}
 	})

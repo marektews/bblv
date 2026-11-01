@@ -104,6 +104,22 @@ func (d *dismissedAlerts) restore(id string, keys []string) bool {
 	})
 }
 
+// keepPrinters forgets the alerts of printers other than ids, e.g. removed
+// while the server was not running.
+func (d *dismissedAlerts) keepPrinters(ids []string) {
+	d.mu.Lock()
+	var gone []string
+	for id := range d.byPrinter {
+		if !slices.Contains(ids, id) {
+			gone = append(gone, id)
+		}
+	}
+	d.mu.Unlock()
+	for _, id := range gone {
+		d.retain(id, nil)
+	}
+}
+
 // retain forgets the alerts the printer no longer reports.
 func (d *dismissedAlerts) retain(id string, current []string) bool {
 	return d.change(id, func(old []string) []string {

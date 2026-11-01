@@ -246,14 +246,19 @@ func (m *Monitor) SyncPrinters(cfgs []config.Printer) {
 	}
 	clear(m.printers[len(kept):])
 	m.printers = kept
+	ids := make([]string, len(kept))
+	for i, p := range kept {
+		ids[i] = p.id
+	}
 	m.mu.Unlock()
+	// Also printers removed while the server was not running.
+	m.dismissed.keepPrinters(ids)
 
 	for _, p := range retired {
 		p.retire()
 	}
 	for _, p := range removed {
 		p.close()
-		m.dismissed.retain(p.id, nil)
 		m.publish(Event{Type: "removed", Info: Info{ID: p.id}})
 	}
 	for _, p := range changed {

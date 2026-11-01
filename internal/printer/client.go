@@ -131,6 +131,12 @@ func lightCommand(on bool) string {
 		`","led_on_time":500,"led_off_time":500,"loop_times":0,"interval_time":0}}`
 }
 
+// Complete tells whether the printer has reported its state in full; see
+// State.Complete.
+func (c *Client) Complete() bool {
+	return c.state.Complete()
+}
+
 // Status returns a typed snapshot of the current state.
 func (c *Client) Status() Status {
 	return c.state.Status()

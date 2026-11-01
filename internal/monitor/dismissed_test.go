@@ -2,10 +2,12 @@ package monitor
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"slices"
 	"testing"
 
+	"github.com/marektews/bblv/internal/config"
 	"github.com/marektews/bblv/internal/printer"
 )
 
@@ -64,5 +66,29 @@ func TestDismissedAlerts(t *testing.T) {
 	}
 	if err := m.DismissAlerts("nope", nil); err == nil {
 		t.Fatal("unknown printer accepted")
+	}
+}
+
+// The alerts of printers no longer configured, also those removed while
+// the server was not running, are forgotten.
+func TestDismissedAlertsOfRemovedPrinters(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "dismissed-alerts.json")
+	if err := os.WriteFile(path, []byte(`{"a1":["hms:0300_0D00_0002_0003"],"old":["error:0700_8011"]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m := New(nil, "")
+	if err := m.KeepDismissedAlerts(path); err != nil {
+		t.Fatal(err)
+	}
+	m.SyncPrinters([]config.Printer{{ID: "a1", Name: "A1", Model: "A1", Host: "192.0.2.1", Serial: "S1"}})
+	if got := m.dismissed.list("a1"); len(got) != 1 {
+		t.Fatalf("alerts of a configured printer: %v", got)
+	}
+	if got := m.dismissed.list("old"); len(got) != 0 {
+		t.Fatalf("alerts of a printer no longer configured: %v", got)
+	}
+	m.SyncPrinters(nil)
+	if got := m.dismissed.list("a1"); len(got) != 0 {
+		t.Fatalf("alerts of a removed printer: %v", got)
 	}
 }
