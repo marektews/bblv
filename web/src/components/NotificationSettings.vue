@@ -105,7 +105,7 @@ async function sendTest() {
 
 <template>
   <section>
-    <h3><fa-icon icon="bell" class="ic" />{{ t('notify.browserTitle') }}</h3>
+    <h3><fa-icon icon="desktop" class="ic" />{{ t('notify.browserTitle') }}</h3>
     <p class="hint">{{ t('notify.browserHint') }}</p>
     <el-alert v-if="browserNote" :title="browserNote" type="warning" :closable="false" show-icon />
     <el-switch :model-value="browserNotify.enabled" :active-text="t('notify.browserEnable')" @change="(v) => toggle(!!v)" />

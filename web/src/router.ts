@@ -8,6 +8,6 @@ export const router = createRouter({
   routes: [
     { path: '/', component: Dashboard },
     { path: '/printer/:id', component: PrinterView, props: true },
-    { path: '/settings', component: Settings },
+    { path: '/settings/:tab?', component: Settings, props: true },
   ],
 })

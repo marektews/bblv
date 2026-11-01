@@ -149,6 +149,10 @@ const en = {
   settings: {
     title: 'Settings',
     printers: 'Printers',
+    configured: 'Configured printers',
+    notifications: 'Notifications',
+    access: 'Access',
+    about: 'About',
     addManually: 'Add manually',
     addPrinter: 'Add printer',
     editPrinter: 'Edit printer',
@@ -199,7 +203,8 @@ const en = {
     removePassword: 'Remove password',
     passwordSaved: 'Password saved',
     passwordRemoved: 'Password removed',
-    version: 'Bambu Live View {version}',
+    version: 'Version',
+    sourceCode: 'Source code',
   },
   format: {
     minutes: '{m} min',

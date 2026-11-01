@@ -127,7 +127,8 @@ certificate either.
 
 ## Configuration
 
-Open **Settings** in the web UI.
+Open **Settings** in the web UI. They are grouped in tabs: **Printers**,
+**Notifications**, **Access** (the password) and **About** (the version).
 
 1. **Printers found in the network** are listed with their name, model, IP
    address and serial number; click **Add**. Printers announce themselves
@@ -142,7 +143,7 @@ Open **Settings** in the web UI.
    stored, and access codes are never sent back to the browser. A service
    running under a system account cannot see your Bambu Studio file; use the
    upload then.
-3. **Password** (optional): without one, everyone in your network can view
+3. **Password** (optional, in **Access**): without one, everyone in your network can view
    and change everything. For access from outside, use a VPN rather than
    exposing bblv to the internet. After a wrong password further attempts,
    from any browser, wait 1 s, then 2, 4… up to 30 s. Logging out ends the
@@ -274,7 +275,7 @@ bblv tells when a print finishes, fails or is paused (e.g. out of filament)
 and when a new HMS alert or print error appears, with its description. It
 compares consecutive reports, so nothing is told for the state found at
 start-up, but a print that finished while the printer was out of reach is.
-Both kinds are set up in **Settings**:
+Both kinds are set up in **Settings → Notifications**:
 
 - **In this browser**: a system notification while the bblv tab is open in
   the background, or a message on the page while it is visible. Every

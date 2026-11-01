@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import {
   addPrinter,
   deletePrinter,
@@ -19,7 +20,23 @@ import NotificationSettings from '../components/NotificationSettings.vue'
 import PrinterDialog from '../components/PrinterDialog.vue'
 import { auth, printers, serverVersion } from '../store'
 
+const props = defineProps<{ tab?: string }>()
 const { t, locale } = useI18n()
+const router = useRouter()
+
+// The settings are grouped in tabs; the open one is in the address, so that
+// a reload or a link shows it again.
+const TABS = ['printers', 'notifications', 'access', 'about'] as const
+type Tab = (typeof TABS)[number]
+const isTab = (s: string | number | undefined): s is Tab => (TABS as readonly unknown[]).includes(s)
+const tab = computed<Tab>({
+  get: () => (isTab(props.tab) ? props.tab : 'printers'),
+  set: (v) => {
+    router.replace(`/settings/${v}`)
+  },
+})
+const REPO_URL = 'https://github.com/marektews/bblv'
+
 // Live state from the event stream; a printer is missing until the server reports it.
 const liveById = computed(() => new Map(printers.value.map((p) => [p.id, p])))
 
@@ -87,13 +104,21 @@ async function loadDiscovered() {
   }
 }
 
-// Printers announce themselves about every 10 seconds.
+// Printers announce themselves about every 10 seconds; the list is refreshed
+// while its tab is open.
 let timer = 0
-onMounted(() => {
-  load()
-  loadDiscovered()
-  timer = window.setInterval(loadDiscovered, 5000)
-})
+watch(
+  tab,
+  (v) => {
+    clearInterval(timer)
+    if (v === 'printers') {
+      loadDiscovered()
+      timer = window.setInterval(loadDiscovered, 5000)
+    }
+  },
+  { immediate: true },
+)
+onMounted(load)
 onBeforeUnmount(() => clearInterval(timer))
 
 function openNew(from?: DiscoveredPrinter) {
@@ -185,139 +210,181 @@ async function changePassword(unset = false) {
   <div class="settings">
     <h2><fa-icon icon="gear" class="ic" />{{ t('settings.title') }}</h2>
 
-    <section>
-      <div class="section-head">
-        <h3><fa-icon icon="print" class="ic" />{{ t('settings.printers') }}</h3>
-        <el-button size="small" @click="openNew()"><fa-icon icon="plus" class="ic" />{{ t('settings.addManually') }}</el-button>
-      </div>
-      <el-table
-        :data="config?.printers ?? []"
-        :empty-text="t('settings.noPrinters')"
-        :default-sort="printerSort"
-        size="small"
-        @sort-change="onSortChange"
-      >
-        <el-table-column prop="name" :label="t('settings.name')" min-width="140" sortable :sort-method="byName" />
-        <el-table-column prop="model" :label="t('settings.model')" width="100" />
-        <el-table-column prop="host" :label="t('settings.host')" width="140" sortable :sort-method="byHost" />
-        <el-table-column prop="serial" :label="t('settings.serial')" min-width="150" sortable :sort-method="bySerial" />
-        <el-table-column :label="t('settings.accessCode')" width="130">
-          <template #default="{ row }">
-            <el-tag :type="row.hasAccessCode ? 'success' : 'danger'" size="small">
-              <fa-icon :icon="row.hasAccessCode ? 'key' : 'xmark'" class="ic" />
-              {{ row.hasAccessCode ? t('settings.codeSet') : t('settings.codeMissing') }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('settings.connection')" width="120">
-          <template #default="{ row }">
-            <el-tag v-if="liveById.has(row.id)" :type="liveById.get(row.id)!.online ? 'success' : 'info'" size="small">
-              <fa-icon :icon="liveById.get(row.id)!.online ? 'circle-check' : 'plug-circle-xmark'" class="ic" />
-              {{ liveById.get(row.id)!.online ? t('settings.online') : t('state.OFFLINE') }}
-            </el-tag>
-            <span v-else>—</span>
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('status.sdCard')" width="100">
-          <template #default="{ row }">
-            <el-tag v-if="liveById.get(row.id)?.online" :type="liveById.get(row.id)!.status.sdCard ? 'success' : 'warning'" size="small">
-              <fa-icon :icon="liveById.get(row.id)!.status.sdCard ? 'sd-card' : 'xmark'" class="ic" />
-              {{ liveById.get(row.id)!.status.sdCard ? t('status.sdYes') : t('status.sdNone') }}
-            </el-tag>
-            <span v-else>—</span>
-          </template>
-        </el-table-column>
-        <el-table-column width="200" align="right">
-          <template #default="{ row }">
-            <el-button size="small" @click="openEdit(row as PrinterConfig)"><fa-icon icon="pen" class="ic" />{{ t('settings.edit') }}</el-button>
-            <el-button size="small" type="danger" plain @click="remove(row as PrinterConfig)">
-              <fa-icon icon="trash" class="ic" />{{ t('settings.delete') }}
+    <el-tabs v-model="tab">
+      <el-tab-pane name="printers">
+        <template #label><fa-icon icon="print" class="ic" />{{ t('settings.printers') }}</template>
+        <section>
+          <div class="section-head">
+            <h3><fa-icon icon="list-check" class="ic" />{{ t('settings.configured') }}</h3>
+            <el-button size="small" @click="openNew()"><fa-icon icon="plus" class="ic" />{{ t('settings.addManually') }}</el-button>
+          </div>
+          <el-table
+            :data="config?.printers ?? []"
+            :empty-text="t('settings.noPrinters')"
+            :default-sort="printerSort"
+            size="small"
+            @sort-change="onSortChange"
+          >
+            <el-table-column prop="name" :label="t('settings.name')" min-width="140" sortable :sort-method="byName" />
+            <el-table-column prop="model" :label="t('settings.model')" width="100" />
+            <el-table-column prop="host" :label="t('settings.host')" width="140" sortable :sort-method="byHost" />
+            <el-table-column prop="serial" :label="t('settings.serial')" min-width="150" sortable :sort-method="bySerial" />
+            <el-table-column :label="t('settings.accessCode')" width="130">
+              <template #default="{ row }">
+                <el-tag :type="row.hasAccessCode ? 'success' : 'danger'" size="small">
+                  <fa-icon :icon="row.hasAccessCode ? 'key' : 'xmark'" class="ic" />
+                  {{ row.hasAccessCode ? t('settings.codeSet') : t('settings.codeMissing') }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('settings.connection')" width="120">
+              <template #default="{ row }">
+                <el-tag v-if="liveById.has(row.id)" :type="liveById.get(row.id)!.online ? 'success' : 'info'" size="small">
+                  <fa-icon :icon="liveById.get(row.id)!.online ? 'circle-check' : 'plug-circle-xmark'" class="ic" />
+                  {{ liveById.get(row.id)!.online ? t('settings.online') : t('state.OFFLINE') }}
+                </el-tag>
+                <span v-else>—</span>
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('status.sdCard')" width="100">
+              <template #default="{ row }">
+                <el-tag v-if="liveById.get(row.id)?.online" :type="liveById.get(row.id)!.status.sdCard ? 'success' : 'warning'" size="small">
+                  <fa-icon :icon="liveById.get(row.id)!.status.sdCard ? 'sd-card' : 'xmark'" class="ic" />
+                  {{ liveById.get(row.id)!.status.sdCard ? t('status.sdYes') : t('status.sdNone') }}
+                </el-tag>
+                <span v-else>—</span>
+              </template>
+            </el-table-column>
+            <el-table-column width="200" align="right">
+              <template #default="{ row }">
+                <el-button size="small" @click="openEdit(row as PrinterConfig)"><fa-icon icon="pen" class="ic" />{{ t('settings.edit') }}</el-button>
+                <el-button size="small" type="danger" plain @click="remove(row as PrinterConfig)">
+                  <fa-icon icon="trash" class="ic" />{{ t('settings.delete') }}
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </section>
+
+        <section>
+          <h3><fa-icon icon="magnifying-glass" class="ic" />{{ t('settings.discovered') }}</h3>
+          <p class="hint">{{ t('settings.discoveredHint') }}</p>
+          <el-alert v-if="discoveryError" type="warning" :title="t('settings.discoveryUnavailable', { msg: discoveryError })" :closable="false" />
+          <el-table :data="discovered" :empty-text="t('settings.noneDiscovered')" size="small">
+            <el-table-column prop="name" :label="t('settings.name')" min-width="140" />
+            <el-table-column prop="model" :label="t('settings.model')" width="100" />
+            <el-table-column prop="host" :label="t('settings.host')" width="140" />
+            <el-table-column prop="serial" :label="t('settings.serial')" min-width="150" />
+            <el-table-column prop="firmware" :label="t('status.firmware')" width="120" />
+            <el-table-column width="170" align="right">
+              <template #default="{ row }">
+                <el-tag v-if="row.configuredAs" size="small" type="info"><fa-icon icon="check" class="ic" />{{ t('settings.alreadyAdded') }}</el-tag>
+                <el-button v-else size="small" type="primary" @click="openNew(row as DiscoveredPrinter)">
+                  <fa-icon icon="plus" class="ic" />{{ t('settings.add') }}
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </section>
+
+        <section>
+          <h3><fa-icon icon="file-import" class="ic" />{{ t('settings.importTitle') }}</h3>
+          <p class="hint">{{ t('settings.importHint') }}</p>
+          <p v-if="config" class="hint">
+            <code>{{ config.studioConfig.path }}</code> —
+            {{ config.studioConfig.found ? t('settings.studioFound') : t('settings.studioNotFound') }}
+          </p>
+          <div class="buttons">
+            <el-button :disabled="!config?.studioConfig.found" :loading="importing" @click="runImport()">
+              <fa-icon icon="desktop" class="ic" />{{ t('settings.importLocal') }}
             </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </section>
+            <el-button :loading="importing" @click="confFile?.click()"><fa-icon icon="file-arrow-up" class="ic" />{{ t('settings.importFile') }}</el-button>
+            <input ref="confFile" type="file" accept=".conf" hidden @change="onConfFile" />
+          </div>
+        </section>
+      </el-tab-pane>
 
-    <section>
-      <h3><fa-icon icon="magnifying-glass" class="ic" />{{ t('settings.discovered') }}</h3>
-      <p class="hint">{{ t('settings.discoveredHint') }}</p>
-      <el-alert v-if="discoveryError" type="warning" :title="t('settings.discoveryUnavailable', { msg: discoveryError })" :closable="false" />
-      <el-table :data="discovered" :empty-text="t('settings.noneDiscovered')" size="small">
-        <el-table-column prop="name" :label="t('settings.name')" min-width="140" />
-        <el-table-column prop="model" :label="t('settings.model')" width="100" />
-        <el-table-column prop="host" :label="t('settings.host')" width="140" />
-        <el-table-column prop="serial" :label="t('settings.serial')" min-width="150" />
-        <el-table-column prop="firmware" :label="t('status.firmware')" width="120" />
-        <el-table-column width="170" align="right">
-          <template #default="{ row }">
-            <el-tag v-if="row.configuredAs" size="small" type="info"><fa-icon icon="check" class="ic" />{{ t('settings.alreadyAdded') }}</el-tag>
-            <el-button v-else size="small" type="primary" @click="openNew(row as DiscoveredPrinter)">
-              <fa-icon icon="plus" class="ic" />{{ t('settings.add') }}
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </section>
+      <el-tab-pane name="notifications">
+        <template #label><fa-icon icon="bell" class="ic" />{{ t('settings.notifications') }}</template>
+        <NotificationSettings :ntfy="config?.ntfy" />
+      </el-tab-pane>
 
-    <section>
-      <h3><fa-icon icon="file-import" class="ic" />{{ t('settings.importTitle') }}</h3>
-      <p class="hint">{{ t('settings.importHint') }}</p>
-      <p v-if="config" class="hint">
-        <code>{{ config.studioConfig.path }}</code> —
-        {{ config.studioConfig.found ? t('settings.studioFound') : t('settings.studioNotFound') }}
-      </p>
-      <div class="buttons">
-        <el-button :disabled="!config?.studioConfig.found" :loading="importing" @click="runImport()">
-          <fa-icon icon="desktop" class="ic" />{{ t('settings.importLocal') }}
-        </el-button>
-        <el-button :loading="importing" @click="confFile?.click()"><fa-icon icon="file-arrow-up" class="ic" />{{ t('settings.importFile') }}</el-button>
-        <input ref="confFile" type="file" accept=".conf" hidden @change="onConfFile" />
-      </div>
-    </section>
+      <el-tab-pane name="access">
+        <template #label><fa-icon icon="lock" class="ic" />{{ t('settings.access') }}</template>
+        <section>
+          <h3><fa-icon icon="key" class="ic" />{{ t('settings.password') }}</h3>
+          <p class="hint">{{ config?.passwordSet ? t('settings.passwordSetHint') : t('settings.passwordHint') }}</p>
+          <el-form label-position="top" class="password" @submit.prevent="changePassword()">
+            <el-form-item v-if="config?.passwordSet" :label="t('settings.currentPassword')">
+              <el-input v-model="pw.current" type="password" show-password autocomplete="current-password" />
+            </el-form-item>
+            <el-form-item :label="t('settings.newPassword')">
+              <el-input v-model="pw.password" type="password" show-password autocomplete="new-password" />
+            </el-form-item>
+            <el-form-item :label="t('settings.repeatPassword')" :error="pw.repeat && pwMismatch ? t('settings.passwordMismatch') : ''">
+              <el-input v-model="pw.repeat" type="password" show-password autocomplete="new-password" />
+            </el-form-item>
+            <div class="buttons">
+              <el-button type="primary" native-type="submit" :loading="pw.busy" :disabled="!pw.password || pwMismatch">
+                <fa-icon icon="floppy-disk" class="ic" />{{ config?.passwordSet ? t('settings.changePassword') : t('settings.setPassword') }}
+              </el-button>
+              <el-button v-if="config?.passwordSet" :loading="pw.busy" :disabled="!pw.current" @click="changePassword(true)">
+                <fa-icon icon="lock-open" class="ic" />{{ t('settings.removePassword') }}
+              </el-button>
+            </div>
+          </el-form>
+        </section>
+      </el-tab-pane>
 
-    <NotificationSettings :ntfy="config?.ntfy" />
-
-    <section>
-      <h3><fa-icon icon="lock" class="ic" />{{ t('settings.password') }}</h3>
-      <p class="hint">{{ config?.passwordSet ? t('settings.passwordSetHint') : t('settings.passwordHint') }}</p>
-      <el-form label-position="top" class="password" @submit.prevent="changePassword()">
-        <el-form-item v-if="config?.passwordSet" :label="t('settings.currentPassword')">
-          <el-input v-model="pw.current" type="password" show-password autocomplete="current-password" />
-        </el-form-item>
-        <el-form-item :label="t('settings.newPassword')">
-          <el-input v-model="pw.password" type="password" show-password autocomplete="new-password" />
-        </el-form-item>
-        <el-form-item :label="t('settings.repeatPassword')" :error="pw.repeat && pwMismatch ? t('settings.passwordMismatch') : ''">
-          <el-input v-model="pw.repeat" type="password" show-password autocomplete="new-password" />
-        </el-form-item>
-        <div class="buttons">
-          <el-button type="primary" native-type="submit" :loading="pw.busy" :disabled="!pw.password || pwMismatch">
-            <fa-icon icon="floppy-disk" class="ic" />{{ config?.passwordSet ? t('settings.changePassword') : t('settings.setPassword') }}
-          </el-button>
-          <el-button v-if="config?.passwordSet" :loading="pw.busy" :disabled="!pw.current" @click="changePassword(true)">
-            <fa-icon icon="lock-open" class="ic" />{{ t('settings.removePassword') }}
-          </el-button>
-        </div>
-      </el-form>
-    </section>
+      <el-tab-pane name="about">
+        <template #label><fa-icon icon="circle-info" class="ic" />{{ t('settings.about') }}</template>
+        <section>
+          <h3><fa-icon icon="cube" class="ic" />Bambu Live View</h3>
+          <el-descriptions :column="1" border size="small" class="about">
+            <el-descriptions-item :label="t('settings.version')">
+              <span class="version">{{ serverVersion || '—' }}</span>
+            </el-descriptions-item>
+            <el-descriptions-item :label="t('settings.sourceCode')">
+              <a :href="REPO_URL" target="_blank" rel="noopener noreferrer">
+                {{ REPO_URL.replace('https://', '') }}<fa-icon icon="arrow-up-right-from-square" class="ic-after" />
+              </a>
+            </el-descriptions-item>
+          </el-descriptions>
+        </section>
+      </el-tab-pane>
+    </el-tabs>
 
     <PrinterDialog :initial="dialog" :editing="!!editingId" :saving="saving" @save="save" @close="dialog = null" />
-
-    <p v-if="serverVersion" class="version">{{ t('settings.version', { version: serverVersion }) }}</p>
   </div>
 </template>
 
 <style scoped>
 .version {
-  margin: 0;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
   user-select: text;
+}
+
+.about {
+  max-width: 480px;
+}
+
+.about a {
+  color: var(--el-color-primary);
 }
 
 .settings {
   max-width: 1100px;
   margin: 0 auto;
+}
+
+/* On a phone the four tabs fit in one row without their icons. */
+@media (max-width: 480px) {
+  .settings :deep(.el-tabs__item) {
+    padding: 0 8px;
+  }
+
+  .settings :deep(.el-tabs__item .ic) {
+    display: none;
+  }
 }
 
 section {

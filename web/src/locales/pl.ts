@@ -151,6 +151,10 @@ const pl: Messages = {
   settings: {
     title: 'Ustawienia',
     printers: 'Drukarki',
+    configured: 'Skonfigurowane drukarki',
+    notifications: 'Powiadomienia',
+    access: 'Dostęp',
+    about: 'O programie',
     addManually: 'Dodaj ręcznie',
     addPrinter: 'Dodaj drukarkę',
     editPrinter: 'Edytuj drukarkę',
@@ -201,7 +205,8 @@ const pl: Messages = {
     removePassword: 'Usuń hasło',
     passwordSaved: 'Hasło zapisane',
     passwordRemoved: 'Hasło usunięte',
-    version: 'Bambu Live View {version}',
+    version: 'Wersja',
+    sourceCode: 'Kod źródłowy',
   },
   format: {
     minutes: '{m} min',
