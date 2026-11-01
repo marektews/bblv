@@ -105,6 +105,40 @@ func TestCAsWithoutPins(t *testing.T) {
 	}
 }
 
+// A CA learned for a printer that is no longer configured, e.g. a device
+// that claimed a serial number, must not vouch for printers added later.
+func TestRetainForgetsRemovedPrinters(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "printer-ca.pem")
+	bbl, bblKey := certificate(t, "BBL CA", nil, nil)
+	rogue, rogueKey := certificate(t, "Rogue CA", nil, nil)
+	old, _ := certificate(t, "Old CA", nil, nil)
+	s := &Store{path: path, cas: []*authority{{cert: old}}} // from before pinning
+	for _, c := range []struct {
+		serial string
+		ca     *x509.Certificate
+		caKey  *ecdsa.PrivateKey
+	}{{"A1SERIAL", bbl, bblKey}, {"A1OTHER", bbl, bblKey}, {"FAKESERIAL", rogue, rogueKey}} {
+		if err := s.Check(chainOf(t, c.serial, c.ca, c.caKey), c.serial); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	s.Retain([]string{"a1serial"})
+	if s.Count() != 2 {
+		t.Fatalf("%d CAs kept, want the BBL CA and the one without pins", s.Count())
+	}
+	if s.Verify(chainOf(t, "NEWSERIAL", rogue, rogueKey), "NEWSERIAL") {
+		t.Fatal("the CA of a removed printer still vouches for new ones")
+	}
+	if !s.Verify(chainOf(t, "A1SERIAL", bbl, bblKey), "A1SERIAL") {
+		t.Fatal("a configured printer lost its CA")
+	}
+	loaded, err := Load(path)
+	if err != nil || loaded.Count() != 2 {
+		t.Fatalf("saved %d CAs, %v", loaded.Count(), err)
+	}
+}
+
 func TestChainWithoutCARefused(t *testing.T) {
 	bbl, bblKey := certificate(t, "BBL CA", nil, nil)
 	s := &Store{}

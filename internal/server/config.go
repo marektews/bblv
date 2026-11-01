@@ -44,6 +44,10 @@ type printerInput struct {
 
 var errDuplicateSerial = errors.New("a printer with this serial number is already configured")
 
+// errCodeForSerial refuses to give the access code of a printer to another
+// serial number, not pinned to a CA yet, which any device can claim.
+var errCodeForSerial = errors.New("enter the access code again when changing the serial number")
+
 func (in *printerInput) normalize() error {
 	in.Name = strings.TrimSpace(in.Name)
 	in.Model = strings.TrimSpace(in.Model)
@@ -149,10 +153,12 @@ func (s *server) updatePrinter(w http.ResponseWriter, r *http.Request) {
 				return errDuplicateSerial
 			}
 		}
-		target.Name, target.Model, target.Host, target.Serial = in.Name, in.Model, in.Host, in.Serial
 		if in.AccessCode != "" {
 			target.AccessCode = in.AccessCode
+		} else if target.AccessCode != "" && !strings.EqualFold(target.Serial, in.Serial) {
+			return errCodeForSerial
 		}
+		target.Name, target.Model, target.Host, target.Serial = in.Name, in.Model, in.Host, in.Serial
 		p = *target
 		return nil
 	})
@@ -342,6 +348,8 @@ func (s *server) configError(w http.ResponseWriter, err error) bool {
 		return false
 	case errors.Is(err, errDuplicateSerial):
 		writeError(w, http.StatusConflict, err.Error())
+	case errors.Is(err, errCodeForSerial):
+		writeError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, config.ErrNotFound):
 		writeError(w, http.StatusNotFound, err.Error())
 	default:

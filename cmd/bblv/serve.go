@@ -119,7 +119,15 @@ func serve(ctx context.Context, o serveOptions) error {
 		}
 		// Every saved change reaches the monitor in the order of the saves,
 		// also when settings and the relocator change printers at once.
-		cfgStore.Watch(func(c config.Config) { mon.SyncPrinters(c.Printers) })
+		// Printers removed or given another serial number are unpinned.
+		cfgStore.Watch(func(c config.Config) {
+			mon.SyncPrinters(c.Printers)
+			serials := make([]string, len(c.Printers))
+			for i, p := range c.Printers {
+				serials[i] = p.Serial
+			}
+			cas.Retain(serials)
+		})
 	}
 
 	ctx, cancel := context.WithCancel(ctx)

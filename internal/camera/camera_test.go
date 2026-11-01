@@ -147,6 +147,13 @@ func TestRTSPURL(t *testing.T) {
 	if _, err := rtspURL("disable", "10.0.0.5"); Code(err) != "liveview-disabled" {
 		t.Errorf("disabled: err = %v", err)
 	}
+	// The URL carries the access code, so it never goes out in clear text
+	// or to another ffmpeg protocol.
+	for _, reported := range []string{"rtsp://192.168.4.44/streaming/live/1", "http://192.168.4.44/x", "file:///etc/passwd"} {
+		if u, err := rtspURL(reported, "10.0.0.5"); err == nil {
+			t.Errorf("rtspURL(%q) = %v, want an error", reported, u)
+		}
+	}
 }
 
 func TestFFmpegReportsWhyItCannotStart(t *testing.T) {

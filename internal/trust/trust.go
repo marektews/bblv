@@ -126,6 +126,37 @@ func (s *Store) Check(chain []*x509.Certificate, serial string) error {
 	return nil
 }
 
+// Retain unpins the printers whose serial numbers are not in configured,
+// e.g. after they were removed or given another serial number, and drops
+// the CAs that no printer is pinned to any more: a CA learned for a device
+// that is gone must not vouch for printers added later. CAs that never had
+// a pin, kept by versions before pinning, stay until a printer is pinned.
+func (s *Store) Retain(configured []string) {
+	keep := map[string]bool{}
+	for _, serial := range configured {
+		keep[strings.ToUpper(serial)] = true
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	changed := false
+	kept := s.cas[:0]
+	for _, a := range s.cas {
+		had := len(a.serials)
+		a.serials = slices.DeleteFunc(a.serials, func(serial string) bool { return !keep[serial] })
+		changed = changed || len(a.serials) != had
+		if had > 0 && len(a.serials) == 0 {
+			slog.Info("forgetting a printer CA no configured printer uses", "ca", a.cert.Subject.CommonName)
+			continue
+		}
+		kept = append(kept, a)
+	}
+	clear(s.cas[len(kept):])
+	s.cas = kept
+	if changed {
+		s.saveLocked()
+	}
+}
+
 // Verify tells whether a chain presented at some address belongs to the
 // printer with the given serial number, without learning anything: it must
 // be signed by the CA the printer is pinned to or, for a printer not pinned

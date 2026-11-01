@@ -153,6 +153,7 @@ const en = {
     serial: 'Serial number',
     accessCode: 'Access Code',
     keepAccessCode: 'Leave empty to keep the current code',
+    accessCodeForSerial: 'Enter the access code again after changing the serial number',
     accessCodeHint: 'Shown on the printer screen in LAN Only Mode, or import it from Bambu Studio below.',
     codeSet: 'Set',
     codeMissing: 'Missing',

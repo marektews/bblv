@@ -125,6 +125,9 @@ func FFmpeg(ffmpeg, host, accessCode string, reported func() string) Source {
 // rtspURL turns the reported ipcam.rtsp_url ("disable" while LAN live view is
 // off) into the stream address at the configured host, which the server
 // reaches the printer by; before the first report it assumes the usual one.
+// Only rtsps is accepted: the URL carries the access code, which another
+// scheme reported by a device at the printer's address could send in clear
+// text or to an ffmpeg protocol other than RTSP.
 func rtspURL(reported, host string) (*url.URL, error) {
 	if reported == "disable" {
 		return nil, ErrLiveViewDisabled
@@ -136,10 +139,13 @@ func rtspURL(reported, host string) (*url.URL, error) {
 		if err != nil {
 			return nil, fmt.Errorf("reported RTSP address: %w", err)
 		}
-		u.Scheme, u.Path, u.RawQuery, port = r.Scheme, r.Path, r.RawQuery, r.Port()
+		if r.Scheme != "rtsps" {
+			return nil, fmt.Errorf("reported RTSP address uses %q, not rtsps", r.Scheme)
+		}
+		u.Path, u.RawQuery, port = r.Path, r.RawQuery, r.Port()
 	}
 	if port == "" {
-		port = map[string]string{"rtsps": "322", "rtsp": "554"}[u.Scheme]
+		port = "322"
 	}
 	u.Host = net.JoinHostPort(host, port)
 	return u, nil

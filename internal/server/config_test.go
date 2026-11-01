@@ -81,6 +81,17 @@ func TestPrinterConfigLifecycle(t *testing.T) {
 		t.Fatalf("config leaks the code or lacks the update: %s", raw)
 	}
 
+	// Another serial number, not pinned to a CA yet, does not get the code:
+	// any device could claim it.
+	resp = send(t, c, "PUT", ts.URL+"/api/config/printers/bambus-a1", map[string]string{"host": "127.0.0.4", "serial": "03919D999999999"})
+	if resp.StatusCode != http.StatusBadRequest || cfg.Get().Printers[0].Host != "127.0.0.3" {
+		t.Fatalf("serial changed without the code: %d %+v", resp.StatusCode, cfg.Get().Printers[0])
+	}
+	resp = send(t, c, "PUT", ts.URL+"/api/config/printers/bambus-a1", map[string]string{"host": "127.0.0.4", "serial": "03919D999999999", "accessCode": "11112222"})
+	if p := cfg.Get().Printers[0]; resp.StatusCode != 200 || p.Serial != "03919D999999999" || p.AccessCode != "11112222" {
+		t.Fatalf("serial change with the code: %d %+v", resp.StatusCode, p)
+	}
+
 	if del := send(t, c, "DELETE", ts.URL+"/api/config/printers/bambus-a1", nil); del.StatusCode != http.StatusNoContent {
 		t.Fatalf("delete: %d", del.StatusCode)
 	}

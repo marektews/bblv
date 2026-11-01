@@ -28,9 +28,24 @@ watch(
   },
 )
 
+// The server gives the saved access code only to the serial number it was
+// entered for; another one, which any device could claim, needs it again.
+const keepsCode = computed(
+  () => props.editing && !!props.initial?.hasAccessCode && values.serial.trim().toUpperCase() === (props.initial?.serial ?? '').toUpperCase(),
+)
+
 const rules = computed<FormRules>(() => ({
   host: [{ required: true, message: t('settings.required'), trigger: 'blur' }],
   serial: [{ required: true, message: t('settings.required'), trigger: 'blur' }],
+  accessCode: [
+    {
+      validator: (_rule, value: string, callback) =>
+        props.editing && props.initial?.hasAccessCode && !keepsCode.value && !value.trim()
+          ? callback(new Error(t('settings.accessCodeForSerial')))
+          : callback(),
+      trigger: 'blur',
+    },
+  ],
 }))
 
 async function submit() {
@@ -63,7 +78,7 @@ async function submit() {
           type="password"
           show-password
           autocomplete="off"
-          :placeholder="editing && initial?.hasAccessCode ? t('settings.keepAccessCode') : ''"
+          :placeholder="keepsCode ? t('settings.keepAccessCode') : ''"
         />
         <div class="hint">{{ t('settings.accessCodeHint') }}</div>
       </el-form-item>

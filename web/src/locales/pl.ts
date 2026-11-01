@@ -155,6 +155,7 @@ const pl: Messages = {
     serial: 'Numer seryjny',
     accessCode: 'Access Code',
     keepAccessCode: 'Zostaw puste, aby nie zmieniać kodu',
+    accessCodeForSerial: 'Po zmianie numeru seryjnego wpisz Access Code ponownie',
     accessCodeHint: 'Widoczny na ekranie drukarki w trybie LAN Only albo do zaimportowania z Bambu Studio (poniżej).',
     codeSet: 'Ustawiony',
     codeMissing: 'Brak',

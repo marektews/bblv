@@ -155,7 +155,9 @@ Bambu Lab CA. On a printer's first connection bblv learns that CA and pins
 the printer to it in `printer-ca.pem`; later connections with a certificate
 from another CA are refused, so a device taking over the printer's address
 gets no access code. The view of the printer then says why it is offline.
-If the certificates change for real, e.g. with new firmware, delete
+For the same reason, changing a printer's serial number in **Settings**
+needs its access code again, and removing a printer also forgets its pin
+and a CA no other printer uses. If the certificates change for real, e.g. with new firmware, delete
 `printer-ca.pem` and restart bblv. Expiry dates are not checked: the CA of
 the A1 expires in 2032, before the certificates it signed.
 
