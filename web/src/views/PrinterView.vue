@@ -108,6 +108,12 @@ const printer = computed(() => printers.value.find((p) => p.id === props.id))
   margin-bottom: 12px;
 }
 
+/* The groups under the 3D view stand apart from it and from each other. */
+.main > :deep(.filament-panel),
+.main > :deep(.timelapse-panel) {
+  margin-top: 12px;
+}
+
 /* The last report of an offline printer: AMS, alerts and the device are
    no longer current. Sections, as on a phone their panel has no box. */
 .offline :deep(.status-panel > section),
