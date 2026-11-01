@@ -180,9 +180,11 @@ If a printer has been offline for 2 minutes, bblv looks for it:
   number as the common name.
 
 When found, the new address is saved to `config.json` and the printer is
-reconnected. While it stays offline, the search is repeated every 10
-minutes. An address edited in **Settings** in the meantime is not
-overwritten.
+reconnected. While it stays offline, its announcements are checked every
+30 seconds and the subnet is searched again after 10 minutes, then at
+doubling intervals up to every 2 hours, so that a printer switched off for
+the night does not have the network scanned until the morning. An address
+edited in **Settings** in the meantime is not overwritten.
 
 A printer is trusted at a new address only when its certificate is also
 signed by the CA it is pinned to (see [Configuration](#configuration)), so

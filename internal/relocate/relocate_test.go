@@ -9,6 +9,7 @@ import (
 	"crypto/x509/pkix"
 	"math/big"
 	"path/filepath"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -181,5 +182,54 @@ func TestSubnet(t *testing.T) {
 	}
 	if _, ok := subnet("printer.local"); ok {
 		t.Fatal("a host name has no subnet")
+	}
+}
+
+// A printer switched off for the night is found nowhere; its subnet is
+// scanned at growing intervals, while its announcements are checked at
+// every check, so that it is still found at once when it comes back.
+func TestSearchBacksOffWhileThePrinterIsOff(t *testing.T) {
+	ca, caKey := certificate(t, "BBL CA", true, nil, nil)
+	printerCert, _ := certificate(t, testSerial, false, ca, caKey)
+	cfg := &fakeConfig{c: config.Config{Printers: []config.Printer{{ID: "a1", Host: "10.0.0.5", Serial: testSerial}}}}
+	mon := &fakeMonitor{online: map[string]bool{"a1": false}}
+	cas := &trust.Store{}
+	if err := cas.Check([]*x509.Certificate{printerCert, ca}, testSerial); err != nil {
+		t.Fatal(err)
+	}
+	r := New(cfg, mon, nil, cas)
+	var probes atomic.Int32
+	r.probe = func(_ context.Context, host string) []*x509.Certificate {
+		probes.Add(1)
+		if host == "10.1.0.20" {
+			return []*x509.Certificate{printerCert, ca}
+		}
+		return nil
+	}
+	ctx := context.Background()
+	t0 := time.Now()
+	r.check(ctx, t0)
+	var scans []time.Duration
+	for d := offlineFor; d <= 4*time.Hour; d += checkEvery {
+		before := probes.Load()
+		r.check(ctx, t0.Add(d))
+		if probes.Load()-before >= 254 {
+			scans = append(scans, d)
+		}
+	}
+	want := []time.Duration{2 * time.Minute, 12 * time.Minute, 32 * time.Minute, 72 * time.Minute, 152 * time.Minute}
+	if !slices.Equal(scans, want) {
+		t.Fatalf("scans at %v, want %v", scans, want)
+	}
+
+	// The printer comes back at another address and announces itself.
+	r.disc = fakeAnnouncements{{Serial: testSerial, Host: "10.1.0.20"}}
+	before := probes.Load()
+	r.check(ctx, t0.Add(4*time.Hour+checkEvery))
+	if got := cfg.c.Printers[0].Host; got != "10.1.0.20" || probes.Load()-before != 1 {
+		t.Fatalf("host = %s after %d probes, want the announced address at once", got, probes.Load()-before)
+	}
+	if r.misses["a1"] != 0 {
+		t.Fatal("misses kept after the printer was found")
 	}
 }

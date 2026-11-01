@@ -129,15 +129,20 @@ func (c *Client) Status() Status {
 	return c.state.Status()
 }
 
+// onConnect runs in a goroutine of its own after every (re)connection.
 func (c *Client) onConnect(conn mqtt.Client) {
 	slog.Info("printer connected", "printer", c.p.ID, "host", c.p.Host)
-	if c.onConnection != nil {
-		c.onConnection(true)
-	}
+	// The printer is online only once its reports can arrive; before, the
+	// view would show the last known state as current.
 	report := "device/" + c.p.Serial + "/report"
-	if t := conn.Subscribe(report, 0, c.onMessage); !t.WaitTimeout(10*time.Second) || t.Error() != nil {
-		slog.Error("subscribe failed", "printer", c.p.ID, "err", t.Error())
-		return
+	if err := subscribe(conn, report, c.onMessage); errors.Is(err, ErrNotConnected) {
+		return // lost again; the next connection subscribes
+	} else if err != nil {
+		// A late answer still lets the reports in, which then mark the
+		// printer online; the requests below are harmless anyway.
+		slog.Error("subscribe failed", "printer", c.p.ID, "err", err)
+	} else if c.onConnection != nil {
+		c.onConnection(true)
 	}
 	request := "device/" + c.p.Serial + "/request"
 	for _, cmd := range []string{getVersion, pushAll} {
@@ -145,6 +150,39 @@ func (c *Client) onConnect(conn mqtt.Client) {
 			slog.Error("request failed", "printer", c.p.ID, "err", t.Error())
 		}
 	}
+}
+
+// subscribeTimeout is how long to wait for the printer to confirm a
+// subscription.
+var subscribeTimeout = 10 * time.Second
+
+// subackFailure is the return code of a refused subscription (MQTT 3.1.1).
+const subackFailure = 0x80
+
+// subscribe subscribes to topic, trying again a few times while connected.
+// paho reports a broker refusing the subscription only in the result of the
+// token, not as its error.
+func subscribe(conn mqtt.Client, topic string, handler mqtt.MessageHandler) error {
+	err := ErrNotConnected
+	for range 3 {
+		if !conn.IsConnectionOpen() {
+			return ErrNotConnected
+		}
+		t := conn.Subscribe(topic, 0, handler)
+		switch {
+		case !t.WaitTimeout(subscribeTimeout):
+			err = errors.New("the printer did not confirm the subscription")
+		case t.Error() != nil:
+			err = t.Error()
+		default:
+			if st, ok := t.(*mqtt.SubscribeToken); ok && st.Result()[topic] == subackFailure {
+				err = errors.New("the printer refused the subscription")
+				continue
+			}
+			return nil
+		}
+	}
+	return err
 }
 
 func (c *Client) onMessage(_ mqtt.Client, m mqtt.Message) {

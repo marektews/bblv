@@ -36,6 +36,22 @@ const (
 // valid, e.g. after the password changed.
 var sessionCheck = 15 * time.Second
 
+// streamWriteTimeout is how long one write to a stream may take. A viewer
+// that vanished without closing the connection, e.g. a phone that left the
+// Wi-Fi, would otherwise keep the stream, and the camera, running until TCP
+// gives up, on Linux after a quarter of an hour.
+var streamWriteTimeout = 15 * time.Second
+
+// streamDeadlines returns a function setting the write deadline of the
+// next write to a stream, and one clearing it when the stream ends, so that
+// the end of the response is still written when the last write was long
+// ago, e.g. after a camera stopped sending frames.
+func streamDeadlines(w http.ResponseWriter) (set, reset func()) {
+	rc := http.NewResponseController(w)
+	return func() { rc.SetWriteDeadline(time.Now().Add(streamWriteTimeout)) },
+		func() { rc.SetWriteDeadline(time.Time{}) }
+}
+
 type server struct {
 	mon     *monitor.Monitor
 	cfg     *config.Store
@@ -236,6 +252,8 @@ func (s *server) camera(w http.ResponseWriter, r *http.Request) {
 	h.Set("Content-Type", "multipart/x-mixed-replace; boundary=frame")
 	h.Set("Cache-Control", "no-cache, no-store")
 	h.Set("X-Accel-Buffering", "no")
+	deadline, clearDeadline := streamDeadlines(w)
+	defer clearDeadline()
 	check := time.NewTicker(sessionCheck)
 	defer check.Stop()
 	for {
@@ -250,6 +268,7 @@ func (s *server) camera(w http.ResponseWriter, r *http.Request) {
 			if !streaming { // the printer was removed
 				return
 			}
+			deadline()
 			if _, err := fmt.Fprintf(w, "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n", len(img)); err != nil {
 				return
 			}
@@ -377,6 +396,9 @@ func (s *server) events(w http.ResponseWriter, r *http.Request) {
 
 	updates, cancel := s.mon.Subscribe()
 	defer cancel()
+	deadline, clearDeadline := streamDeadlines(w)
+	defer clearDeadline()
+	deadline() // for the whole state sent on connect
 	emit := func(e monitor.Event) error {
 		var data any = e.Info
 		if e.Type == "removed" {
@@ -416,7 +438,11 @@ func (s *server) events(w http.ResponseWriter, r *http.Request) {
 		case e, subscribed := <-updates:
 			// Fell too far behind: the browser reconnects and gets every
 			// printer again.
-			if !subscribed || emit(e) != nil {
+			if !subscribed {
+				return
+			}
+			deadline()
+			if emit(e) != nil {
 				return
 			}
 		case <-ping.C:
@@ -425,6 +451,7 @@ func (s *server) events(w http.ResponseWriter, r *http.Request) {
 			if !s.auth.Valid(r) {
 				return
 			}
+			deadline()
 			if _, err := io.WriteString(w, ": ping\n\n"); err != nil {
 				return
 			}

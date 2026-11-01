@@ -47,3 +47,36 @@ func TestTooManyMovesRejected(t *testing.T) {
 		t.Fatalf("err = %v, want ErrTooLarge", err)
 	}
 }
+
+// Layer changes without moves, which cost no points, are limited too.
+func TestTooManyLayersRejected(t *testing.T) {
+	old := gcode.MaxLayers
+	gcode.MaxLayers = 10
+	t.Cleanup(func() { gcode.MaxLayers = old })
+	if _, err := gcode.Parse(strings.NewReader(strings.Repeat("; CHANGE_LAYER\n", 11))); !errors.Is(err, gcode.ErrTooLarge) {
+		t.Fatalf("err = %v, want ErrTooLarge", err)
+	}
+	if _, err := gcode.Parse(strings.NewReader(strings.Repeat("; CHANGE_LAYER\n", 10))); err != nil {
+		t.Fatalf("at the limit: %v", err)
+	}
+}
+
+// A plate G-code inside a .3mf may unpack to far more than the upload.
+func TestOversizedGcodeRejected(t *testing.T) {
+	old := gcode.MaxBytes
+	gcode.MaxBytes = 1 << 20
+	t.Cleanup(func() { gcode.MaxBytes = old })
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, _ := zw.Create("Metadata/plate_1.gcode")
+	w.Write([]byte(plateGcode))
+	w.Write(bytes.Repeat([]byte("; padding\n"), (2<<20)/10)) // compresses to a few kB
+	zw.Close()
+	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = parse3MF(zr, 0); !errors.Is(err, gcode.ErrTooLarge) {
+		t.Fatalf("err = %v, want ErrTooLarge", err)
+	}
+}

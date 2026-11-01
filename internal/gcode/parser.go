@@ -19,7 +19,14 @@ const (
 // stay far below: a large one has a few hundred thousand points.
 var MaxPoints = 5_000_000
 
-// ErrTooLarge is returned for G-code whose toolpath exceeds MaxPoints.
+// MaxLayers limits the layers, whose index a point keeps in 16 bits.
+var MaxLayers = 1 << 16
+
+// MaxBytes limits the G-code read: a small .3mf can unpack to gigabytes.
+// Real prints have at most a few hundred megabytes.
+var MaxBytes int64 = 2 << 30
+
+// ErrTooLarge is returned for G-code beyond MaxPoints, MaxLayers or MaxBytes.
 var ErrTooLarge = errors.New("the print has too many moves to show")
 
 // Parse reads G-code produced by Bambu Studio (or a slicer using the Prusa
@@ -28,16 +35,20 @@ var ErrTooLarge = errors.New("the print has too many moves to show")
 func Parse(r io.Reader) (*Model, error) {
 	p := &parser{m: &Model{}, features: map[string]int{}, filamentDiam: 1.75}
 	p.feature = p.featureIndex("")
-	sc := bufio.NewScanner(r)
+	limited := &io.LimitedReader{R: r, N: MaxBytes + 1}
+	sc := bufio.NewScanner(limited)
 	sc.Buffer(make([]byte, 64*1024), 16*1024*1024)
 	for sc.Scan() {
 		p.line(sc.Text())
-		if len(p.m.Points) > MaxPoints {
+		if len(p.m.Points) > MaxPoints || len(p.m.Layers) > MaxLayers {
 			return nil, ErrTooLarge
 		}
 	}
 	if err := sc.Err(); err != nil {
 		return nil, err
+	}
+	if limited.N <= 0 {
+		return nil, ErrTooLarge
 	}
 	p.finish()
 	return p.m, nil

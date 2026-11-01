@@ -34,7 +34,8 @@ import (
 const (
 	checkEvery   = 30 * time.Second
 	offlineFor   = 2 * time.Minute  // before a printer is searched for
-	searchAgain  = 10 * time.Minute // between searches for the same printer
+	searchAgain  = 10 * time.Minute // between scans for the same printer, doubled after every miss
+	maxSearchGap = 2 * time.Hour    // up to this
 	probeTimeout = 3 * time.Second
 	parallel     = 32 // addresses probed at once
 )
@@ -67,7 +68,8 @@ type Relocator struct {
 
 	learned  map[string]bool      // printers whose CA was taken in this run, by ID
 	offline  map[string]time.Time // since when a printer is offline, by ID
-	searched map[string]time.Time // last search for a printer, by ID
+	searched map[string]time.Time // last scan for a printer, by ID
+	misses   map[string]int       // scans in a row that did not find a printer, by ID
 }
 
 // New creates a relocator that recognises printers by their certificates,
@@ -78,7 +80,7 @@ func New(cfg ConfigStore, mon Printers, disc Announcements, cas *trust.Store) *R
 	}
 	return &Relocator{
 		cfg: cfg, mon: mon, disc: disc, cas: cas, probe: certificates,
-		learned: map[string]bool{}, offline: map[string]time.Time{}, searched: map[string]time.Time{},
+		learned: map[string]bool{}, offline: map[string]time.Time{}, searched: map[string]time.Time{}, misses: map[string]int{},
 	}
 }
 
@@ -107,13 +109,14 @@ func (r *Relocator) check(ctx context.Context, now time.Time) {
 		case p.Serial == "":
 		case online[p.ID]:
 			delete(r.offline, p.ID)
+			delete(r.misses, p.ID)
 			if !r.learned[p.ID] {
 				r.learned[p.ID] = r.learn(ctx, p)
 			}
 		default:
 			if since, known := r.offline[p.ID]; !known {
 				r.offline[p.ID] = now
-			} else if now.Sub(since) >= offlineFor && now.Sub(r.searched[p.ID]) >= searchAgain {
+			} else if now.Sub(since) >= offlineFor {
 				lost = append(lost, p)
 			}
 		}
@@ -138,8 +141,10 @@ func (r *Relocator) learn(ctx context.Context, p config.Printer) bool {
 	return true
 }
 
-// search looks for lost printers at the addresses they announce and in the
-// subnets of their last addresses, and moves those found.
+// search looks for lost printers at the addresses they announce, which
+// costs a probe and is done at every check, and in the subnets of their last
+// addresses, and moves those found. A printer that is simply switched off
+// is found nowhere, so its subnet is scanned at growing intervals.
 func (r *Relocator) search(ctx context.Context, lost []config.Printer, now time.Time) {
 	announced := map[string]string{}
 	if r.disc != nil {
@@ -149,27 +154,48 @@ func (r *Relocator) search(ctx context.Context, lost []config.Printer, now time.
 	}
 	candidates := map[string][]*x509.Certificate{} // by host
 	subnets := map[string]bool{}
+	var scanned []config.Printer
 	for _, p := range lost {
-		r.searched[p.ID] = now
 		if host := announced[strings.ToUpper(p.Serial)]; host != "" && host != p.Host {
-			candidates[host] = r.probe(ctx, host)
-			if r.cas.Verify(candidates[host], p.Serial) {
+			if chain := r.probe(ctx, host); r.cas.Verify(chain, p.Serial) {
+				r.move(p, host)
 				continue
+			} else if chain != nil {
+				candidates[host] = chain // find warns about a device claiming the serial
 			}
 		}
+		if now.Sub(r.searched[p.ID]) < r.searchGap(p.ID) {
+			continue
+		}
+		r.searched[p.ID] = now
+		scanned = append(scanned, p)
 		if prefix, ok := subnet(p.Host); ok {
 			subnets[prefix] = true
 		}
+	}
+	if len(scanned) == 0 {
+		return
 	}
 	for prefix := range subnets {
 		slog.Info("searching for offline printers", "subnet", prefix+".0/24")
 		maps.Copy(candidates, r.scan(ctx, prefix))
 	}
-	for _, p := range lost {
+	for _, p := range scanned {
 		if host := r.find(candidates, p); host != "" && host != p.Host {
 			r.move(p, host)
+		} else {
+			r.misses[p.ID]++
 		}
 	}
+}
+
+// searchGap is how long after its last scan a lost printer is scanned for
+// again: searchAgain after the first scan that missed it, doubled after
+// every further one, up to maxSearchGap. A printer switched off for the
+// night would otherwise have its subnet probed every few minutes until the
+// morning.
+func (r *Relocator) searchGap(id string) time.Duration {
+	return min(searchAgain<<min(max(r.misses[id]-1, 0), 8), maxSearchGap)
 }
 
 // find returns the host whose certificate proves to be the printer's.
@@ -232,6 +258,7 @@ func (r *Relocator) move(p config.Printer, host string) {
 	}
 	slog.Info("printer found at a new address", "printer", p.ID, "from", p.Host, "to", host)
 	delete(r.offline, p.ID)
+	delete(r.misses, p.ID)
 }
 
 // subnet returns the first three octets of an IPv4 address.

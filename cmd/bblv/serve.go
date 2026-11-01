@@ -149,6 +149,9 @@ func serve(ctx context.Context, o serveOptions) error {
 			Handler:           h,
 			ReadHeaderTimeout: 10 * time.Second,
 			IdleTimeout:       2 * time.Minute,
+			// Without pings, an HTTP/2 connection of a device that left the
+			// network stays open until TCP gives up.
+			HTTP2: &http.HTTP2Config{SendPingTimeout: 30 * time.Second, PingTimeout: 15 * time.Second},
 			// Cancels long-lived event streams on shutdown.
 			BaseContext: func(net.Listener) context.Context { return ctx },
 		}

@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/marektews/bblv/internal/auth"
 	"github.com/marektews/bblv/internal/bambustudio"
@@ -41,6 +42,9 @@ type printerInput struct {
 	Serial     string `json:"serial"`
 	AccessCode string `json:"accessCode"` // empty keeps the current code when editing
 }
+
+// bodyTimeout is how long reading a JSON request body may take.
+const bodyTimeout = 30 * time.Second
 
 var errDuplicateSerial = errors.New("a printer with this serial number is already configured")
 
@@ -226,6 +230,7 @@ func (s *server) importCodes(w http.ResponseWriter, r *http.Request) {
 	var err error
 	if ct, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type")); ct == "multipart/form-data" {
 		r.Body = http.MaxBytesReader(w, r.Body, 16<<20)
+		http.NewResponseController(w).SetReadDeadline(time.Now().Add(4 * bodyTimeout))
 		file, _, ferr := r.FormFile("file")
 		if ferr != nil {
 			writeError(w, http.StatusBadRequest, "missing file: "+ferr.Error())
@@ -365,6 +370,9 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 		writeError(w, http.StatusUnsupportedMediaType, "expected application/json")
 		return false
 	}
+	// A body sent byte by byte, e.g. to a login without a session, must not
+	// hold the connection for ever.
+	http.NewResponseController(w).SetReadDeadline(time.Now().Add(bodyTimeout))
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(v); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 		return false
