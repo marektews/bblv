@@ -151,6 +151,38 @@ func TestUploadRejectsOtherFiles(t *testing.T) {
 	}
 }
 
+// Each upload takes up to 512 MB of temporary disk space, so only a few
+// are taken at once.
+func TestUploadsLimited(t *testing.T) {
+	ts := setup(t)
+	post := func() int {
+		var body bytes.Buffer
+		mw := multipart.NewWriter(&body)
+		fw, _ := mw.CreateFormFile("file", "model.stl")
+		io.WriteString(fw, "solid")
+		mw.Close()
+		resp, err := http.Post(ts.URL+"/api/printers/replay/upload", mw.FormDataContentType(), &body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	for range cap(receiving) {
+		receiving <- struct{}{} // uploads in progress
+	}
+	busy := post()
+	for range cap(receiving) {
+		<-receiving
+	}
+	if busy != http.StatusTooManyRequests {
+		t.Fatalf("with every slot taken: %d", busy)
+	}
+	if code := post(); code != http.StatusBadRequest {
+		t.Fatalf("after they finished: %d, want the file checked", code)
+	}
+}
+
 func TestEvents(t *testing.T) {
 	ts := setup(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)

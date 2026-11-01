@@ -54,6 +54,10 @@ async function send(file: File, plate: number) {
       }
       return
     }
+    if (err instanceof ApiError && err.status === 429) {
+      ElMessage.warning(t('geometry.uploadBusy'))
+      return
+    }
     ElMessage.error(t('geometry.uploadFailed', { msg: err instanceof Error ? err.message : String(err) }))
   }
 }

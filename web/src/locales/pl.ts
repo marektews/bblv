@@ -101,6 +101,7 @@ const pl: Messages = {
     upload: 'Wgraj model',
     uploadDone: 'Model wgrany',
     uploadFailed: 'Nie udało się wgrać pliku: {msg}',
+    uploadBusy: 'Trwają inne wysyłki plików. Spróbuj ponownie, gdy się skończą.',
     choosePlate: 'Plik zawiera kilka płyt ({plates}). Która jest drukowana?',
     plateTitle: 'Wybierz płytę',
     plateInvalid: 'Podaj jeden z podanych numerów płyt',

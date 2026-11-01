@@ -99,6 +99,7 @@ const en = {
     upload: 'Upload model',
     uploadDone: 'Model uploaded',
     uploadFailed: 'Upload failed: {msg}',
+    uploadBusy: 'Other uploads are in progress. Try again when they have finished.',
     choosePlate: 'The file contains several plates ({plates}). Which one is being printed?',
     plateTitle: 'Choose a plate',
     plateInvalid: 'Enter one of the listed plate numbers',

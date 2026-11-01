@@ -5,7 +5,9 @@ import { EXTERNAL_TRAY, geometryUrl, type PrinterInfo } from '../api'
 import { ACTIVE_STATES, profileName, slotLabel, trayAt, useFormat } from '../format'
 import type { Locale } from '../i18n'
 import { featureColor, featureLabel } from '../viewer/features'
+import { connected } from '../store'
 import { loadGeometry, type LoadedGeometry } from '../viewer/geometry'
+import { Retry } from '../viewer/retry'
 import { PrintScene, type ColorMode } from '../viewer/scene'
 
 const props = defineProps<{ printer: PrinterInfo }>()
@@ -104,7 +106,13 @@ function bedSize(model: string): [number, number] {
   return [256, 256]
 }
 
+// A download that failed, e.g. while the Wi-Fi was down, is tried again a
+// few times, and once more when the connection to the server is back.
+const retry = new Retry([5_000, 10_000, 20_000, 40_000, 60_000], () => load())
+let failedKey = ''
+
 async function load() {
+  retry.cancel()
   if (noWebGL.value) {
     return // nothing could show it
   }
@@ -121,6 +129,9 @@ async function load() {
   if (g.key === loadedKey) {
     return
   }
+  if (g.key !== failedKey) {
+    retry.reset()
+  }
   abort?.abort()
   const controller = new AbortController()
   abort = controller
@@ -134,9 +145,12 @@ async function load() {
     scene?.setGeometry(data)
     scene?.setLayer(sceneLayer.value)
     lines.value = scene?.lines ?? false
+    failedKey = ''
   } catch (err) {
     if (!controller.signal.aborted) {
       loadError.value = err instanceof Error ? err.message : String(err)
+      failedKey = g.key
+      retry.failed()
     }
   } finally {
     if (abort === controller) {
@@ -169,6 +183,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  retry.cancel()
   abort?.abort()
   scene?.dispose()
   scene = null
@@ -177,6 +192,12 @@ onBeforeUnmount(() => {
 // Every status update brings a new printer object, so the watched value is
 // a string: a new array would restart a download in progress each time.
 watch(() => (props.printer.geometry.state === 'ready' ? (props.printer.geometry.key ?? '') : ''), load)
+watch(connected, (on) => {
+  if (on && loadError.value) {
+    retry.reset()
+    load()
+  }
+})
 watch(sceneLayer, (v) => scene?.setLayer(v))
 watch(colorMode, (m) => scene?.setColorMode(m))
 watch(interactive, (on) => scene?.setInteractive(on))

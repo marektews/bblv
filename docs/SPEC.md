@@ -127,7 +127,7 @@ Widok 3D: bez WebGL komunikat zamiast sceny; przy utracie kontekstu komunikat, p
 - HTTPS (domyślnie `:8443`): certyfikat samopodpisany (`internal/tlscert`, ECDSA P-256, 397 dni) w katalogu danych (`https-cert.pem`, `https-key.pem`) dla `localhost`, nazwy komputera, jego adresów IPv4 (bez link-local i interfejsów point-to-point), `::1` i nazw z `-allow-host`; odnawiany (także w trakcie pracy, sprawdzanie raz na dobę) 30 dni przed wygaśnięciem albo gdy brakuje w nim wymaganej nazwy: tych powyżej, ale z adresów IPv4 tylko adresu trasy domyślnej (adresu w sieci lokalnej). Adresy kart wirtualnych (Hyper-V Default Switch, WSL, Docker), losowane przy starcie systemu, trafiają tylko do nowego certyfikatu i go nie wymuszają — każdy nowy to nowe ostrzeżenie przeglądarki na każdym urządzeniu (z tego samego powodu bez zmiennych adresów IPv6). `-listen` (`:8080`) przekierowuje 307 na HTTPS z tą samą ścieżką; `-https=` = samo HTTP. Ciasteczko sesji `Secure` przy HTTPS.
 - Nagłówki: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` + `frame-ancestors 'none'` (bez osadzania w ramkach), `Referrer-Policy: no-referrer`.
 - Katalog danych dostępny tylko dla właściciela (Windows: chroniony DACL — SYSTEM, Administratorzy, właściciel katalogu; Linux: 0700).
-- Upload: max 512 MB, strumieniowo do pliku tymczasowego, 15 min na przesłanie; najwyżej 2 pliki parsowane naraz; toolpath max 5 mln punktów, 65 536 warstw i 2 GB G-code (także rozpakowanego z `.3mf`); miniatura i `slice_info.config` z `.3mf` max 16 MB.
+- Upload: max 512 MB, strumieniowo do pliku tymczasowego, 15 min na przesłanie; najwyżej 2 uploady naraz (kolejny dostaje 429 z `Retry-After`), czyli najwyżej 1 GB na dysku tymczasowym; toolpath max 5 mln punktów, 65 536 warstw i 2 GB G-code (także rozpakowanego z `.3mf`); miniatura i `slice_info.config` z `.3mf` max 16 MB.
 - Limity czasu: nagłówki 10 s, treść JSON 30 s (import kodów 2 min), każdy zapis do strumienia kamery i SSE 15 s (klient, który zniknął albo przestał czytać, nie trzyma strumienia ani kamery), pingi HTTP/2 co 30 s.
 - Relokacja: ogłoszenia SSDP sprawdzane co 30 s; skan /24 po 2 min offline, potem po 10 min i w podwajanych odstępach do 2 h (reset, gdy drukarka wróci albo zostanie znaleziona).
 - MQTT: drukarka jest online dopiero po potwierdzonej subskrypcji raportów (do 3 prób; odmowa brokera 0x80 rozpoznawana z wyniku tokenu).
@@ -157,10 +157,10 @@ bblv.log        log usługi Windows, do 5 MB + bblv.log.1
 
 ## 9. Frontend
 - Vue 3 + Element Plus + TypeScript + Vite (projekt w `web/`, build do `internal/webui/dist/`).
-  - TypeScript 6.x — TS 7 (natywny, w Go) nie ma API JS, którego wymaga `vue-tsc`.
+  - TypeScript 6.x — TS 7 (natywny, w Go) nie ma API JS, którego wymaga `vue-tsc`; Dependabot pomija jego wersje główne, dopóki `vue-tsc` go nie obsłuży.
   - Element Plus importowany w całości (~350 KB JS po gzip); serwer wysyła pliki tekstowe skompresowane gzip.
   - Biblioteki w osobnym chunku `vendor` (~380 KB gzip), aplikacja w `index` (~21 KB gzip), Three.js w leniwie ładowanym `PrintViewer`; po aktualizacji przeglądarka pobiera ponownie zwykle tylko aplikację. `chunkSizeWarningLimit` tuż nad największym chunkiem, żeby wzrost był widoczny.
-  - Widok 3D: przejście nieprzezroczyste rysuje tylko odcinki warstw do bieżącej (`instanceCount`), przezroczyste „duchy” — wszystkie, odrzucając wydrukowane w shaderze.
+  - Widok 3D: przejście nieprzezroczyste rysuje tylko odcinki warstw do bieżącej (`instanceCount`), przezroczyste „duchy” — wszystkie, odrzucając wydrukowane w shaderze. Nieudane pobranie geometrii jest ponawiane po 5, 10, 20, 40 i 60 s oraz po odzyskaniu połączenia SSE.
   - Karta przeglądarki: postęp w tytule („42% · A1”), ikona SVG (kostka Font Awesome).
   - Paczki npm instalowane z `--before` (wersje co najmniej 2 tygodnie po publikacji).
   - Ikony: Font Awesome Free Solid (`@fortawesome/vue-fontawesome`), wbudowane w bundle (działa offline); w paczce tylko ikony zarejestrowane w `web/src/icons.ts`, w szablonach `<fa-icon icon="…" class="ic" />`.

@@ -32,6 +32,13 @@ const (
 	uploadTimeout = 15 * time.Minute
 )
 
+// receiving limits the uploads handled at once, each of which takes up to
+// maxUpload of temporary disk space until it has been parsed.
+var receiving = make(chan struct{}, 2)
+
+// errBusy is returned for an upload while others take all the slots.
+const errBusy = "other uploads are in progress; try again when they have finished"
+
 // sessionCheck is how often open streams check that their session is still
 // valid, e.g. after the password changed.
 var sessionCheck = 15 * time.Second
@@ -343,6 +350,14 @@ func (s *server) upload(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if _, ok := s.mon.Printer(id); !ok {
 		writeError(w, http.StatusNotFound, "unknown printer")
+		return
+	}
+	select {
+	case receiving <- struct{}{}:
+		defer func() { <-receiving }()
+	default:
+		w.Header().Set("Retry-After", "30")
+		writeError(w, http.StatusTooManyRequests, errBusy)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxUpload)
