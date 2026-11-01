@@ -199,6 +199,21 @@ const en = {
     minutes: '{m} min',
     hoursMinutes: '{h} h {m} min',
   },
+  timelapse: {
+    title: 'Timelapse',
+    refresh: 'Refresh the list',
+    loading: 'Reading the list from the SD card…',
+    empty: 'There are no recordings on the SD card. The printer records a timelapse when you turn it on when sending a print.',
+    play: 'Play',
+    pause: 'Pause',
+    download: 'Download',
+    speed: 'Speed',
+    fetching: 'Fetching the recording from the printer ({size})…',
+    fetchingHint: 'The printer sends recordings slowly, about 0.1 MB/s while printing. You may close this window: the download goes on, and the recording then opens at once.',
+    minutesLeft: 'about {n} min left',
+    failed: 'Could not load: {msg}',
+    frameFailed: 'A frame of the recording could not be loaded.',
+  },
   notify: {
     title: '{printer}: {what}',
     kinds: {

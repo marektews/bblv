@@ -24,6 +24,7 @@ import (
 	"github.com/marektews/bblv/internal/hms"
 	"github.com/marektews/bblv/internal/monitor"
 	"github.com/marektews/bblv/internal/printjob"
+	"github.com/marektews/bblv/internal/timelapse"
 	"github.com/marektews/bblv/internal/webui"
 )
 
@@ -67,6 +68,7 @@ type server struct {
 	hosts      []string
 	version    string
 	ntfyClient *http.Client // sends test notifications
+	tl         *timelapse.Library
 }
 
 // Deps are the services used by the handlers.
@@ -83,7 +85,7 @@ type Deps struct {
 
 // New returns the HTTP handler of the application.
 func New(d Deps) http.Handler {
-	s := &server{mon: d.Monitor, cfg: d.Config, auth: d.Auth, disc: d.Discovery, version: d.Version, ntfyClient: &http.Client{}}
+	s := &server{mon: d.Monitor, cfg: d.Config, auth: d.Auth, disc: d.Discovery, version: d.Version, ntfyClient: &http.Client{}, tl: newTimelapses(d.Monitor)}
 	for _, h := range d.AllowedHosts {
 		s.hosts = append(s.hosts, normalizeHost(h))
 	}
@@ -108,6 +110,11 @@ func New(d Deps) http.Handler {
 	mux.HandleFunc("GET /api/printers/{id}/alerts", s.alerts)
 	mux.HandleFunc("POST /api/printers/{id}/upload", s.upload)
 	mux.HandleFunc("POST /api/printers/{id}/light", s.light)
+	mux.HandleFunc("GET /api/printers/{id}/timelapses", s.timelapses)
+	mux.HandleFunc("GET /api/printers/{id}/timelapses/{name}/thumbnail", s.timelapseThumbnail)
+	mux.HandleFunc("GET /api/printers/{id}/timelapses/{name}/video", s.timelapseVideo)
+	mux.HandleFunc("GET /api/printers/{id}/timelapses/{name}/frames", s.timelapseFrames)
+	mux.HandleFunc("GET /api/printers/{id}/timelapses/{name}/frames/{n}", s.timelapseFrame)
 	mux.HandleFunc("GET /api/events", s.events)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not found")

@@ -120,7 +120,7 @@ func (p *Printer) infoLocked() Info {
 	}
 	info := Info{
 		ID: p.id, Name: p.name, Model: p.model, Experimental: experimental,
-		Online: p.online, Camera: p.camera != nil, Status: p.status, Geometry: p.geom,
+		Online: p.online, Camera: p.camera != nil, Timelapse: p.fetcher != nil, Status: p.status, Geometry: p.geom,
 	}
 	if !p.online {
 		info.ConnectionError = p.connErr

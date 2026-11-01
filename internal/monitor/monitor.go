@@ -17,6 +17,7 @@ import (
 	"github.com/marektews/bblv/internal/cache"
 	"github.com/marektews/bblv/internal/camera"
 	"github.com/marektews/bblv/internal/config"
+	"github.com/marektews/bblv/internal/ftps"
 	"github.com/marektews/bblv/internal/gcode"
 	"github.com/marektews/bblv/internal/notify"
 	"github.com/marektews/bblv/internal/printer"
@@ -66,6 +67,7 @@ type Info struct {
 	Experimental bool   `json:"experimental"`
 	Online       bool   `json:"online"`
 	Camera       bool   `json:"camera"`
+	Timelapse    bool   `json:"timelapse"`              // its SD card can be read, for the timelapses
 	CameraError  string `json:"cameraError,omitempty"`  // camera.Code of why the camera does not work
 	CameraDetail string `json:"cameraDetail,omitempty"` // the error message
 	// ConnectionError tells why an offline printer cannot be reached.
@@ -417,6 +419,21 @@ func (m *Monitor) SetLight(id string, on bool) error {
 		return ErrUnknownPrinter
 	}
 	return p.setLight(on)
+}
+
+// SDCard opens a session on the SD card of a printer, ending with ctx, and
+// returns it with the printer's serial number; ErrNotSupported for a
+// replay, which has no card.
+func (m *Monitor) SDCard(ctx context.Context, id string) (*ftps.Conn, string, error) {
+	p := m.find(id)
+	if p == nil {
+		return nil, "", ErrUnknownPrinter
+	}
+	if p.fetcher == nil {
+		return nil, "", ErrNotSupported
+	}
+	conn, err := ftps.Dial(ctx, p.cfg.Host, p.cfg.AccessCode, m.trust.TLS(p.cfg.Serial).VerifyConnection)
+	return conn, p.cfg.Serial, err
 }
 
 // Camera returns the camera of a printer, nil when it has none.

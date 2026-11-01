@@ -250,3 +250,26 @@ func TestAlerts(t *testing.T) {
 		t.Errorf("hms = %+v", h)
 	}
 }
+
+// A replay has no SD card to read timelapses from.
+func TestTimelapsesOfReplay(t *testing.T) {
+	ts := setup(t)
+	for _, p := range []string{"/api/printers/replay/timelapses", "/api/printers/replay/timelapses/video_1.avi/frames"} {
+		resp, err := http.Get(ts.URL + p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusConflict {
+			t.Errorf("%s: %d", p, resp.StatusCode)
+		}
+	}
+	resp, err := http.Get(ts.URL + "/api/printers/nope/timelapses")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("unknown printer: %d", resp.StatusCode)
+	}
+}

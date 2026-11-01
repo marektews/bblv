@@ -104,6 +104,7 @@ export interface PrinterInfo {
   experimental: boolean
   online: boolean
   camera: boolean
+  timelapse: boolean // its SD card can be read for the timelapses
   // Why the camera does not work: liveview-disabled, ffmpeg-missing, refused,
   // rtsp-unreachable or stream; cameraDetail is the server's message.
   cameraError?: string
@@ -302,6 +303,50 @@ export function importCodes(file?: File): Promise<ImportResult> {
 
 // setLight switches the chamber light of a printer; the printer's next
 // report shows the new mode.
+// A timelapse on the printer's SD card.
+export interface TimelapseVideo {
+  name: string
+  size: number
+  recorded?: string // printer's local time, e.g. 2025-12-22T05:59:16
+  thumbnail: boolean
+}
+
+// The frames of an AVI timelapse, which the player shows one by one.
+export interface TimelapseFrames {
+  fps: number
+  width: number
+  height: number
+  frames: number
+}
+
+const timelapseUrl = (id: string, name: string) => `${printerUrl(id)}/timelapses/${encodeURIComponent(name)}`
+
+export const getTimelapses = (id: string) => request<TimelapseVideo[]>('GET', `${printerUrl(id)}/timelapses`)
+export const timelapseThumbnailUrl = (id: string, name: string) => `${timelapseUrl(id, name)}/thumbnail`
+export const timelapseVideoUrl = (id: string, name: string, download = false) =>
+  `${timelapseUrl(id, name)}/video${download ? '?download=1' : ''}`
+export const timelapseFrameUrl = (id: string, name: string, n: number) => `${timelapseUrl(id, name)}/frames/${n}`
+
+// prepareTimelapse asks the server to bring a video from the printer into
+// its cache, which takes minutes for a long one. Until then it says how far
+// it has come; once there, the frames of an AVI video (frames 0 for an MP4,
+// which the browser plays itself).
+export async function prepareTimelapse(
+  id: string,
+  name: string,
+  signal?: AbortSignal,
+): Promise<{ ready: TimelapseFrames } | { done: number; size: number }> {
+  const resp = await fetch(`${timelapseUrl(id, name)}/frames`, { signal })
+  if (resp.status === 401) {
+    onUnauthorized()
+  }
+  const data = await resp.json().catch(() => ({}))
+  if (!resp.ok) {
+    throw new ApiError(resp.status, data)
+  }
+  return resp.status === 202 ? (data as { done: number; size: number }) : { ready: data as TimelapseFrames }
+}
+
 export function setLight(id: string, on: boolean): Promise<void> {
   return request('POST', `${printerUrl(id)}/light`, { on })
 }

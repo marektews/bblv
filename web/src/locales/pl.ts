@@ -201,6 +201,21 @@ const pl: Messages = {
     minutes: '{m} min',
     hoursMinutes: '{h} godz. {m} min',
   },
+  timelapse: {
+    title: 'Timelapse',
+    refresh: 'Odśwież listę',
+    loading: 'Wczytywanie listy z karty SD…',
+    empty: 'Na karcie SD nie ma nagrań. Drukarka nagrywa timelapse, gdy włączysz go przy wysyłaniu wydruku.',
+    play: 'Odtwórz',
+    pause: 'Pauza',
+    download: 'Pobierz',
+    speed: 'Prędkość',
+    fetching: 'Pobieranie nagrania z drukarki ({size})…',
+    fetchingHint: 'Drukarka wysyła nagrania powoli, w trakcie wydruku ok. 0,1 MB/s. Możesz zamknąć to okno: pobieranie trwa dalej, a gotowe nagranie otworzy się od razu.',
+    minutesLeft: 'zostało ok. {n} min',
+    failed: 'Nie udało się wczytać: {msg}',
+    frameFailed: 'Nie udało się wczytać klatki nagrania.',
+  },
   notify: {
     title: '{printer}: {what}',
     kinds: {

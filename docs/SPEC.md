@@ -85,6 +85,8 @@ Stan (przygotowanie/druk/pauza/koniec/błąd), %, warstwa X/Y, pozostały czas +
 - Przeglądarka: zdarzenie SSE `notification` (`{id, kinds, printerId, printerName, subtask, codes}`); ustawienia w `localStorage` (każde urządzenie osobno zgadza się na powiadomienia). Karta widoczna → `ElNotification` na stronie, w tle → `Notification` systemowe (tag z `id`, karty uzgadniają przez `BroadcastChannel`, żeby nie dublować). Opisy alertów z `/api/printers/{id}/alerts`. Telefony: Chrome na Androidzie wymaga service workera (nie działa przy niezaufanym certyfikacie), iPhone tylko PWA — tam ntfy.
 - ntfy: `config.json` → `ntfy {url, topic, token, events, lang, link}`; publikacja JSON na adres serwera (polskie znaki w tytule), priorytet 4 dla pauzy, nieudanego wydruku i alertów fatal/serious, tagi jako emoji, link do strony drukarki. Kolejka 32 zdarzeń, jeden wysyłający, 10 s na wiadomość. Token nie wraca do przeglądarki; zmiana serwera wymaga ponownego wpisania tokenu (jak Access Code).
 
+**Timelapse (`internal/timelapse`):** A1/P1 zapisują `timelapse/video_RRRR-MM-DD_GG-MM-SS.avi` (Motion JPEG w AVI, 1536×1080, 24 kl./s, bloki `00db` w liście `movi`, bez indeksu `idx1`) i miniatury `timelapse/thumbnail/*.jpg`. Przeglądarki nie odtwarzają MJPEG w AVI, więc serwer indeksuje klatki (przejście po blokach, także pliku jeszcze nagrywanego) i podaje je pojedynczo; odtwarzacz w przeglądarce rysuje je na `<canvas>` z wyprzedzeniem ok. 1 s (pauza, suwak, 0,5–8×). FTPS A1 w trakcie wydruku ok. 120 KB/s (43,6 MB ≈ 6 min), więc nagranie trafia do cache w tle z postępem, a klucz cache zawiera rozmiar (rosnące nagranie pobiera się ponownie). Na drukarkę jedna sesja listy i jedna sesja pobierania naraz; klatki czytane tylko z cache. Nazwy plików sprawdzane (`[A-Za-z0-9._-]`, `.avi`/`.mp4`). Bez usuwania z karty.
+
 **Etapy (`stg_cur`):** nazwy PL/EN dla 78 numerów wg listy ha-bambulab (`web/src/locales/stages.ts`); 0 = drukowanie i -1/255 = bezczynna nie są pokazywane. Etap widoczny w panelu i na kafelku w trakcie wydruku.
 
 ## 5. Serwer HTTP / API
@@ -100,6 +102,11 @@ Stan (przygotowanie/druk/pauza/koniec/błąd), %, warstwa X/Y, pozostały czas +
 | GET | `/api/printers/{id}/camera` | MJPEG (`multipart/x-mixed-replace`); `camera: true` w opisie drukarki, gdy dostępna |
 | POST | `/api/printers/{id}/upload` | ręczny upload G-code / 3MF |
 | POST | `/api/printers/{id}/light` | `{on}` — włącza/wyłącza `chamber_light`; 409 dla drukarki bez światła, offline albo replay; stan wraca w `status.chamberLight` |
+| GET | `/api/printers/{id}/timelapses` | timelapse'y z karty SD (`[{name, size, recorded, thumbnail}]`, najnowsze pierwsze); miniatury trafiają przy tym do cache |
+| GET | `/api/printers/{id}/timelapses/{name}/thumbnail` | miniatura JPEG z cache |
+| GET | `/api/printers/{id}/timelapses/{name}/frames` | przygotowanie nagrania: 202 `{done, size}` w trakcie pobierania w tle (strona pyta co sekundę), potem `{fps, width, height, frames}` (dla MP4 `frames: 0`) |
+| GET | `/api/printers/{id}/timelapses/{name}/frames/{n}` | klatka JPEG przygotowanego AVI, tylko z cache |
+| GET | `/api/printers/{id}/timelapses/{name}/video[?download=1]` | przygotowane nagranie z zakresami (Range); 409 przed przygotowaniem |
 | GET | `/api/auth` | `{required, authenticated}` |
 | GET | `/api/config` | drukarki (bez Access Code, tylko `hasAccessCode`), `passwordSet`, ścieżka `BambuStudio.conf` |
 | POST/PUT/DELETE | `/api/config/printers[/{id}]` | dodanie / zmiana (pusty kod = bez zmiany, adres: IP albo nazwa hosta) / usunięcie; monitor śledzi zapis (`Store.Watch`) |
@@ -146,7 +153,7 @@ Widok 3D: bez WebGL komunikat zamiast sceny; przy utracie kontekstu komunikat, p
 Katalog danych: domyślnie `%ProgramData%\bblv` (Windows) / `/var/lib/bblv` (Linux), nadpisywany flagą `--data`.
 ```
 config.json     drukarki, hash hasła, ustawienia ntfy — zapis atomowy, uprawnienia 0600
-cache/          geometria + miniatury
+cache/          geometria + miniatury, timelapse'y i ich miniatury (wspólny limit 1 GB)
 recordings/     nagrania MQTT (.jsonl)
 filaments.json  nazwy profili filamentów z plików wydruków
 printer-ca.pem  CA drukarek poznane przy relokacji

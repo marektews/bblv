@@ -244,6 +244,22 @@ uploaded, and keeps them in `filaments.json` in the data directory; the
 slots of every printer are then named. A slot whose profile has never
 appeared in a print file shows no profile name.
 
+## Timelapses
+
+The **Timelapse** section of a printer's page, closed at first, lists the
+timelapses on its SD card with their thumbnails, the newest first; the
+printer records one when it is turned on when sending a print. Browsers
+cannot play the Motion JPEG AVI files the A1 and P1 record, so bblv plays
+their frames itself, with pause, seeking and speeds up to 8×, and offers
+the original file for download (MP4 timelapses play in the browser).
+
+The printer sends files slowly, the A1 about 0.1 MB/s while printing, so
+the first time a recording is opened it is brought into the cache in the
+data directory while the player shows how far it has come and the time
+left; the window may be closed meanwhile. From then on it opens at once,
+until the cache, 1 GB with the geometry, makes room for newer files. bblv
+does not delete anything from the SD card.
+
 ## Notifications
 
 bblv tells when a print finishes, fails or is paused (e.g. out of filament)

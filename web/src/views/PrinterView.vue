@@ -6,6 +6,7 @@ import FilamentPanel from '../components/FilamentPanel.vue'
 import GeometryNotice from '../components/GeometryNotice.vue'
 import StateTag from '../components/StateTag.vue'
 import StatusPanel from '../components/StatusPanel.vue'
+import TimelapsePanel from '../components/TimelapsePanel.vue'
 import { reloadForUpdate } from '../reload'
 import { loaded, printers } from '../store'
 
@@ -53,6 +54,7 @@ const printer = computed(() => printers.value.find((p) => p.id === props.id))
         <GeometryNotice :printer="printer" />
         <PrintViewer :key="printer.id" :printer="printer" />
         <FilamentPanel :printer="printer" />
+        <TimelapsePanel v-if="printer.timelapse" :key="printer.id" :printer="printer" />
       </section>
       <aside class="side">
         <CameraPanel v-if="printer.camera" :key="printer.id" :printer="printer" />
