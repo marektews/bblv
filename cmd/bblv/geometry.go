@@ -17,6 +17,7 @@ import (
 	"github.com/marektews/bblv/internal/gcode"
 	"github.com/marektews/bblv/internal/printer"
 	"github.com/marektews/bblv/internal/printjob"
+	"github.com/marektews/bblv/internal/trust"
 )
 
 func runGeometry(args []string) error {
@@ -59,19 +60,23 @@ func runGeometry(args []string) error {
 	if err != nil {
 		return err
 	}
+	cas, err := printerCAs(*dataDir)
+	if err != nil {
+		return err
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	name, gcodeFile := *subtask, ""
 	if name == "" {
 		var s printer.Status
-		s, err = currentPrint(ctx, *p)
+		s, err = currentPrint(ctx, *p, cas)
 		if err != nil {
 			return err
 		}
 		name, gcodeFile = s.Subtask, s.GcodeFile
 	}
-	conn, err := ftps.Dial(ctx, p.Host, p.AccessCode, nil)
+	conn, err := ftps.Dial(ctx, p.Host, p.AccessCode, cas.TLS(p.Serial).VerifyConnection)
 	if err != nil {
 		return err
 	}
@@ -103,10 +108,10 @@ func runGeometry(args []string) error {
 }
 
 // currentPrint connects to the printer and waits for a report naming the current print.
-func currentPrint(ctx context.Context, p config.Printer) (printer.Status, error) {
+func currentPrint(ctx context.Context, p config.Printer, cas *trust.Store) (printer.Status, error) {
 	found := make(chan printer.Status, 1)
 	var c *printer.Client
-	c = printer.New(p, nil, func(printer.Report) {
+	c = printer.New(p, cas, func(printer.Report) {
 		if s := c.Status(); s.Subtask != "" {
 			select {
 			case found <- s:

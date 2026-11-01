@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -85,6 +86,14 @@ func (n *Ntfy) Run(ctx context.Context) {
 	}
 }
 
+// truncate shortens s to at most n runes.
+func truncate(s string, n int) string {
+	if r := []rune(s); len(r) > n {
+		return string(r[:n]) + "…"
+	}
+	return s
+}
+
 // Publish sends one message to the ntfy topic of c.
 func Publish(ctx context.Context, client *http.Client, c config.Ntfy, m Message) error {
 	body, err := json.Marshal(map[string]any{
@@ -111,8 +120,16 @@ func Publish(ctx context.Context, client *http.Client, c config.Ntfy, m Message)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("ntfy answered %s: %s", resp.Status, strings.TrimSpace(string(msg)))
+		// Only the error ntfy explains in its JSON answer, shortened: the
+		// address may be anything, whose answers must not be passed on.
+		status := fmt.Sprintf("ntfy answered %d %s", resp.StatusCode, http.StatusText(resp.StatusCode))
+		var answer struct {
+			Error string `json:"error"`
+		}
+		if json.NewDecoder(io.LimitReader(resp.Body, 4<<10)).Decode(&answer) == nil && answer.Error != "" {
+			return fmt.Errorf("%s: %s", status, truncate(answer.Error, 120))
+		}
+		return errors.New(status)
 	}
 	return nil
 }

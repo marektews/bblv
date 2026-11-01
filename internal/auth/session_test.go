@@ -43,6 +43,16 @@ func TestFailedLoginsHoldBackAllClients(t *testing.T) {
 		t.Fatalf("wait after a success and a failure: %v", err)
 	}
 
+	// A check waits for another one in progress instead of failing.
+	busy := &throttle{checking: true}
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		busy.end(true, now)
+	}()
+	if w := busy.begin(now); w != nil {
+		t.Fatalf("check during another one: %v", w)
+	}
+
 	th := &throttle{}
 	for range 20 {
 		th.end(false, now)

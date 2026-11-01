@@ -123,8 +123,23 @@ func sessionID(cookie string) string {
 }
 
 // SetPassword replaces the password after checking the current one; an empty
-// password removes it. Other sessions end, the caller gets a new one.
+// password removes it. Other sessions end, the caller gets a new one. Wrong
+// current passwords hold further checks back like failed logins, with a
+// *WaitError.
 func (a *Auth) SetPassword(w http.ResponseWriter, r *http.Request, current, password string) error {
+	// Checked outside the configuration lock, which every request takes to
+	// check its session.
+	old := a.store.Get().PasswordHash
+	if old != "" {
+		if wait := a.throttle.begin(a.clock()); wait != nil {
+			return wait
+		}
+		ok := bcrypt.CompareHashAndPassword([]byte(old), []byte(current)) == nil
+		a.throttle.end(ok, a.clock())
+		if !ok {
+			return ErrWrongPassword
+		}
+	}
 	var hash []byte
 	if password != "" {
 		var err error
@@ -134,7 +149,7 @@ func (a *Auth) SetPassword(w http.ResponseWriter, r *http.Request, current, pass
 	}
 	secret := ""
 	err := a.store.Update(func(c *config.Config) error {
-		if c.PasswordHash != "" && bcrypt.CompareHashAndPassword([]byte(c.PasswordHash), []byte(current)) != nil {
+		if c.PasswordHash != old { // changed meanwhile
 			return ErrWrongPassword
 		}
 		if hash != nil {
@@ -159,7 +174,7 @@ func setCookie(w http.ResponseWriter, r *http.Request, secret string) {
 	expires := time.Now().Add(sessionTTL)
 	http.SetCookie(w, &http.Cookie{
 		Name:     cookieName,
-		Value:    token(secret, expires),
+		Value:    token(secret, expires, newSessionID()),
 		Path:     "/",
 		Expires:  expires,
 		HttpOnly: true,
@@ -168,12 +183,18 @@ func setCookie(w http.ResponseWriter, r *http.Request, secret string) {
 	})
 }
 
-// token is "<expiry unix time>.<HMAC of it>".
-func token(secret string, expires time.Time) string {
-	exp := strconv.FormatInt(expires.Unix(), 10)
+// token is "<expiry unix time>.<id>.<HMAC of both>". The random id tells
+// sessions started in the same second apart, so that logging out of one
+// ends no other. Tokens without an id, "<expiry>.<HMAC of it>", were made
+// before; they stay valid until they expire.
+func token(secret string, expires time.Time, id string) string {
+	signed := strconv.FormatInt(expires.Unix(), 10)
+	if id != "" {
+		signed += "." + id
+	}
 	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write([]byte(exp))
-	return exp + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	mac.Write([]byte(signed))
+	return signed + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
 func verify(secret, value string, now time.Time) bool {
@@ -181,7 +202,16 @@ func verify(secret, value string, now time.Time) bool {
 	if secret == "" || !ok || now.Unix() > n {
 		return false
 	}
-	return hmac.Equal([]byte(token(secret, time.Unix(n, 0))), []byte(value))
+	signed := value[:strings.LastIndexByte(value, '.')]
+	_, id, _ := strings.Cut(signed, ".")
+	return hmac.Equal([]byte(token(secret, time.Unix(n, 0), id)), []byte(value))
+}
+
+// newSessionID returns a random id for a session token.
+func newSessionID() string {
+	b := make([]byte, 12)
+	rand.Read(b)
+	return base64.RawURLEncoding.EncodeToString(b)
 }
 
 // expiry returns the expiry unix time of a token.

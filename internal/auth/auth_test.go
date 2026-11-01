@@ -1,8 +1,10 @@
 package auth
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -61,9 +63,17 @@ func TestPasswordLifecycle(t *testing.T) {
 		t.Fatal("session cookie rejected")
 	}
 
+	now := time.Now()
+	a.clock = func() time.Time { return now }
 	if err := a.SetPassword(httptest.NewRecorder(), session, "wrong", "other"); err != ErrWrongPassword {
 		t.Fatalf("err = %v", err)
 	}
+	// Wrong current passwords hold further attempts back like failed logins.
+	var wait *WaitError
+	if err := a.SetPassword(httptest.NewRecorder(), session, "secret", "other"); !errors.As(err, &wait) {
+		t.Fatalf("right after a wrong password: %v", err)
+	}
+	now = now.Add(2 * time.Second)
 	if err := a.SetPassword(httptest.NewRecorder(), session, "secret", "other"); err != nil {
 		t.Fatal(err)
 	}
@@ -78,9 +88,20 @@ func TestPasswordLifecycle(t *testing.T) {
 
 func TestTokenExpiryAndTampering(t *testing.T) {
 	now := time.Now()
-	tok := token("s", now.Add(time.Hour))
+	tok := token("s", now.Add(time.Hour), "id1")
 	if !verify("s", tok, now) {
 		t.Fatal("valid token rejected")
+	}
+	// Sessions started in the same second differ.
+	if other := token("s", now.Add(time.Hour), "id2"); other == tok || !verify("s", other, now) {
+		t.Fatal("the second session of a second")
+	}
+	// Tokens without an id, made before, stay valid until they expire.
+	if old := token("s", now.Add(time.Hour), ""); strings.Count(old, ".") != 1 || !verify("s", old, now) {
+		t.Fatalf("token without an id: %q", old)
+	}
+	if verify("s", strings.Replace(tok, ".id1.", ".id2.", 1), now) {
+		t.Fatal("token with another id accepted")
 	}
 	if verify("s", tok, now.Add(2*time.Hour)) {
 		t.Fatal("expired token accepted")

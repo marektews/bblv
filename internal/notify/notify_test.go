@@ -85,8 +85,17 @@ func TestPublish(t *testing.T) {
 		t.Fatalf("sent %v with %q", got, auth)
 	}
 	c.Topic = "other"
-	if err := Publish(context.Background(), srv.Client(), c, m); err == nil || !strings.Contains(err.Error(), "403") {
+	if err := Publish(context.Background(), srv.Client(), c, m); err == nil || err.Error() != "ntfy answered 403 Forbidden: forbidden" {
 		t.Fatalf("refused: %v", err)
+	}
+	// Another answer than ntfy's is not passed on.
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "secret page", http.StatusNotFound)
+	}))
+	defer other.Close()
+	c.URL = other.URL
+	if err := Publish(context.Background(), other.Client(), c, m); err == nil || err.Error() != "ntfy answered 404 Not Found" {
+		t.Fatalf("other server: %v", err)
 	}
 }
 

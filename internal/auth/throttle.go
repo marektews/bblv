@@ -27,7 +27,7 @@ type WaitError struct {
 }
 
 func (e *WaitError) Error() string {
-	return fmt.Sprintf("too many failed logins, try again in %d s", e.Seconds())
+	return fmt.Sprintf("too many wrong passwords, try again in %d s", e.Seconds())
 }
 
 // Seconds returns the wait rounded up to whole seconds, at least 1.
@@ -35,10 +35,19 @@ func (e *WaitError) Seconds() int {
 	return max(1, int(math.Ceil(e.Wait.Seconds())))
 }
 
+// checkWait is how long a password check waits for another one in
+// progress, e.g. of a second login at the same time or a double click.
+const checkWait = 2 * time.Second
+
 // begin starts a password check, or returns how long to wait first.
 func (t *throttle) begin(now time.Time) *WaitError {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	for waited := time.Duration(0); t.checking && waited < checkWait; waited += 20 * time.Millisecond {
+		t.mu.Unlock()
+		time.Sleep(20 * time.Millisecond)
+		t.mu.Lock()
+	}
 	switch {
 	case t.checking:
 		return &WaitError{Wait: time.Second}

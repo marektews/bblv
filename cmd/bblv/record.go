@@ -39,6 +39,11 @@ func runRecord(args []string) error {
 		*out = filepath.Join(*dataDir, "recordings", fmt.Sprintf("%s-%s.jsonl", p.ID, time.Now().Format("20060102-150405")))
 	}
 
+	cas, err := printerCAs(*dataDir)
+	if err != nil {
+		return err
+	}
+
 	var san *recording.Sanitizer
 	if !*raw {
 		san = recording.NewSanitizer(p.Serial)
@@ -51,7 +56,7 @@ func runRecord(args []string) error {
 
 	var client *printer.Client
 	var status statusLogger
-	client = printer.New(*p, nil, func(r printer.Report) {
+	client = printer.New(*p, cas, func(r printer.Report) {
 		if werr := rec.Write(r.Time, r.Payload); werr != nil {
 			slog.Error("write recording", "err", werr)
 		}

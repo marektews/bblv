@@ -95,7 +95,7 @@ func serve(ctx context.Context, o serveOptions) error {
 	mon := monitor.New(store, ffmpeg)
 	// The CAs of the printers, learned on their first connection; the
 	// printers are pinned to them.
-	cas, err := trust.Load(filepath.Join(o.dataDir, "printer-ca.pem"))
+	cas, err := trust.Load(filepath.Join(o.dataDir, printerCAFile))
 	if err != nil {
 		slog.Error("printer CAs not loaded", "err", err)
 	}

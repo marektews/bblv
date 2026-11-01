@@ -304,6 +304,11 @@ func (s *server) setPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := s.auth.SetPassword(w, r, in.Current, in.Password)
+	if wait := (*auth.WaitError)(nil); errors.As(err, &wait) {
+		w.Header().Set("Retry-After", strconv.Itoa(wait.Seconds()))
+		writeError(w, http.StatusTooManyRequests, err.Error())
+		return
+	}
 	if errors.Is(err, auth.ErrWrongPassword) {
 		writeError(w, http.StatusForbidden, err.Error())
 		return
