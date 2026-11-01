@@ -153,12 +153,14 @@ func serve(ctx context.Context, o serveOptions) error {
 	} else {
 		// Keeps the password and the session cookie off the network in
 		// clear text; the plain address redirects.
-		cert, certErr := tlscert.Load(o.dataDir, tlscert.LocalNames(splitList(o.allowHosts)), time.Now())
+		certs, certErr := tlscert.NewKeeper(o.dataDir, splitList(o.allowHosts))
 		if certErr != nil {
 			return certErr
 		}
+		// A server running for over a year still gets a valid certificate.
+		go certs.Run(ctx)
 		secure := newServer(o.https, app)
-		secure.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
+		secure.TLSConfig = &tls.Config{GetCertificate: certs.GetCertificate, MinVersion: tls.VersionTLS12}
 		servers = append(servers, secure, newServer(o.listen, server.RedirectToHTTPS(o.https)))
 		slog.Info("listening", "https", o.https, "redirect", o.listen, "data", o.dataDir, "version", version)
 	}

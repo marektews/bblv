@@ -65,9 +65,12 @@ and the session cookie off the network in clear text. Browsers warn about
 it, as nobody vouches for it: accept the warning once on every device (in
 Chrome *Advanced → Proceed*). The certificate, `https-cert.pem` and
 `https-key.pem` in the data directory, names `localhost`, the computer's
-name and its IPv4 addresses; it is renewed a month before it expires after
-about a year, or when the computer gets another address, and the warning
-comes again then. `-https=` turns HTTPS off and serves plain HTTP on
+name and its IPv4 addresses. It is renewed, also while the server runs, a
+month before it expires after about a year, or when the computer gets
+another address in the local network, and the warning comes again then.
+Addresses of virtual adapters (Hyper-V, WSL, Docker), which change at every
+boot, do not renew it; to add them, delete both files and restart bblv.
+`-https=` turns HTTPS off and serves plain HTTP on
 `-listen`. On Windows, other devices reach the server only if the firewall
 lets them in on port 8443 (and 8080 for the redirect).
 
