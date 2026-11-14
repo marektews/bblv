@@ -27,6 +27,11 @@ updates:
       # no lib/tsc; lift this once vue-tsc supports it.
       - dependency-name: typescript
         update-types: ['version-update:semver-major']
+      # vue-tsc 3.3.14 reports TS2339 on reactive() bindings in a template
+      # with // in a static attribute, e.g. placeholder="https://ntfy.sh"
+      # (vuejs/language-tools#6322, #6352); lift this once it is fixed.
+      - dependency-name: vue-tsc
+        versions: ['3.3.14']
 
   - package-ecosystem: github-actions
     directory: /
