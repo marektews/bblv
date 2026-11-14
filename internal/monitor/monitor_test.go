@@ -107,6 +107,66 @@ func TestNewPrintEndsTheDownloadBefore(t *testing.T) {
 	eventually(t, func() bool { g := p.info().Geometry; return g.Key == "kb" && g.Subtask == "b" })
 }
 
+// Files not saved yet are fetched again a while later; the geometry is
+// loading meanwhile, and the attempts are counted for the fetcher.
+func TestFilesNotReadyAreFetchedAgain(t *testing.T) {
+	m := New(nil, "")
+	calls := make(chan job, 10)
+	results := make(chan Geometry)
+	p := newPrinter(m, "p", "", "A1", nil)
+	p.fetcher = func(_ context.Context, j job) Geometry {
+		calls <- j
+		return <-results
+	}
+	m.add(p)
+	running := printer.Status{State: "RUNNING", Subtask: "a", TaskID: "7"}
+	p.onStatus(t.Context(), running)
+	if j := <-calls; j.attempt != 1 || j.taskID != "7" || j.lenient {
+		t.Fatalf("job = %+v", j)
+	}
+	results <- Geometry{State: GeometryLoading, notReady: true}
+	eventually(t, func() bool { p.mu.Lock(); defer p.mu.Unlock(); return !p.fetching })
+	if g := p.info().Geometry; g.State != GeometryLoading {
+		t.Fatalf("geometry while the files are written: %+v", g)
+	}
+
+	running.Layer = 1 // too early to ask again
+	p.onStatus(t.Context(), running)
+	select {
+	case j := <-calls:
+		t.Fatalf("asked again at once: %+v", j)
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	p.mu.Lock()
+	p.lastAttempt = time.Now().Add(-time.Minute)
+	p.mu.Unlock()
+	running.Layer = 2
+	p.onStatus(t.Context(), running)
+	if j := <-calls; j.attempt != 2 {
+		t.Fatalf("second job = %+v", j)
+	}
+	results <- Geometry{State: GeometryReady, Key: "k"}
+	eventually(t, func() bool { return p.info().Geometry.Key == "k" })
+}
+
+// Nothing is written for a print that is not running, nor is it fetched
+// again: its files are taken as they are at once.
+func TestFilesOfAFinishedPrintAreTakenAtOnce(t *testing.T) {
+	m := New(nil, "")
+	calls := make(chan job, 1)
+	p := newPrinter(m, "p", "", "A1", nil)
+	p.fetcher = func(_ context.Context, j job) Geometry {
+		calls <- j
+		return Geometry{State: GeometryReady, Key: "k"}
+	}
+	m.add(p)
+	p.onStatus(t.Context(), printer.Status{State: "FINISH", Subtask: "a", TaskID: "7"})
+	if j := <-calls; j.attempt != 1 || !j.lenient {
+		t.Fatalf("job = %+v", j)
+	}
+}
+
 func TestNoFetchWithoutSDCard(t *testing.T) {
 	m := New(nil, "")
 	calls := make(chan job, 10)

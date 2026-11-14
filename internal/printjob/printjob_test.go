@@ -3,6 +3,8 @@ package printjob
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/md5"
+	"encoding/hex"
 	"errors"
 	"io"
 	"reflect"
@@ -104,6 +106,129 @@ func (c fakeCard) Open(p string) (io.ReadCloser, error) {
 		return nil, errors.New("not found")
 	}
 	return io.NopCloser(strings.NewReader(body)), nil
+}
+
+// datedCard is a card whose files have their own times.
+type datedCard struct {
+	fakeCard
+	times map[string]time.Time
+}
+
+func (c datedCard) List(dir string) ([]*ftp.Entry, error) {
+	entries, err := c.fakeCard.List(dir)
+	for _, e := range entries {
+		if t, ok := c.times[e.Name]; ok {
+			e.Time = t
+		}
+	}
+	return entries, err
+}
+
+// The G-code of an earlier print of the same name, which recent firmware
+// leaves beside the .3mf it no longer writes one for, is not taken for
+// the print; one written with the .3mf is.
+func TestFindPairsTheGcodeByTime(t *testing.T) {
+	sent := time.Date(2026, 11, 14, 16, 8, 0, 0, time.UTC)
+	card := func(gcodeTime time.Time) datedCard {
+		return datedCard{fakeCard{
+			"1_Body.bbl":         `{"file path": "/sdcard/cache/Body.3mf"}`,
+			"Body.3mf":           "3mf",
+			"Body_plate_1.gcode": "gcode",
+		}, map[string]time.Time{"1_Body.bbl": sent, "Body.3mf": sent, "Body_plate_1.gcode": gcodeTime}}
+	}
+	for _, tc := range []struct {
+		name      string
+		gcodeTime time.Time
+		want      string
+	}{
+		{"written with the .3mf", sent.Add(time.Minute), "cache/Body_plate_1.gcode"},
+		{"three days before", sent.Add(-85 * time.Hour), ""},
+		{"hours later, by the card's clock", sent.Add(8 * time.Hour), ""},
+	} {
+		f, err := Find(card(tc.gcodeTime), "Body", "Body.3mf")
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if f.Gcode != tc.want || f.ThreeMF != "cache/Body.3mf" || f.Plate != 1 {
+			t.Errorf("%s: %+v", tc.name, *f)
+		}
+	}
+
+	// Without a .bbl the plate came from the G-code; an old one names none.
+	old := card(sent.Add(-85 * time.Hour))
+	delete(old.fakeCard, "1_Body.bbl")
+	f, err := Find(old, "Body", "Body.3mf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.Gcode != "" || f.Plate != 0 {
+		t.Errorf("without a .bbl: %+v", *f)
+	}
+}
+
+func make3MFBytes(t *testing.T, files map[string]string) string {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, body := range files {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.Write([]byte(body))
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.String()
+}
+
+// A .3mf other than the one its .bbl describes, e.g. still being written,
+// is not taken, nor is the G-code beside it, until the printer is done.
+func TestBuildWaitsForTheFilesOfThePrint(t *testing.T) {
+	threeMF := make3MFBytes(t, map[string]string{"Metadata/plate_1.gcode": plateGcode, "Metadata/plate_1.png": "png"})
+	sum := md5.Sum([]byte(threeMF))
+	card := fakeCard{
+		"1_Body.bbl":         `{"file path": "/sdcard/cache/Body.3mf", "subtask id": "1442698974", "md5": "` + strings.ToUpper(hex.EncodeToString(sum[:])) + `"}`,
+		"Body.3mf":           threeMF[:len(threeMF)/2], // being written
+		"Body_plate_1.gcode": plateGcode,
+	}
+	store, err := cache.Open(t.TempDir(), cache.DefaultLimit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := Find(card, "Body", "Body.3mf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.TaskID != "1442698974" {
+		t.Fatalf("task id %q", f.TaskID)
+	}
+	if _, err = Build(card, f, store); !errors.Is(err, ErrNotReady) {
+		t.Fatalf("half a .3mf: %v", err)
+	}
+
+	card["Body.3mf"] = threeMF
+	if f, err = Find(card, "Body", "Body.3mf"); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Build(card, f, store)
+	if err != nil || res.Thumbnail == "" {
+		t.Fatalf("the .3mf written: %+v, %v", res, err)
+	}
+
+	// A printer describing it otherwise gets it after a while.
+	card["Body.3mf"] = make3MFBytes(t, map[string]string{"Metadata/plate_1.gcode": plateGcode + "G1 X20 E1\n"})
+	if f, err = Find(card, "Body", "Body.3mf"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = Build(card, f, store); !errors.Is(err, ErrNotReady) {
+		t.Fatalf("another .3mf: %v", err)
+	}
+	f.Lenient = true
+	if _, err = Build(card, f, store); err != nil {
+		t.Fatalf("lenient: %v", err)
+	}
 }
 
 func TestFind(t *testing.T) {

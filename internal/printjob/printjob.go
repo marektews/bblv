@@ -4,6 +4,7 @@ package printjob
 
 import (
 	"archive/zip"
+	"crypto/md5"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -11,12 +12,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jlaffaye/ftp"
 
@@ -27,6 +30,12 @@ import (
 
 // ErrNotFound means the SD card holds no files for the print.
 var ErrNotFound = errors.New("print files not found on the SD card")
+
+// ErrNotReady means the files on the SD card are not yet those of the print:
+// a printer sent a print from the cloud writes them after the print began,
+// and until then the card holds the files of an earlier print of the same
+// name or a .3mf being written.
+var ErrNotReady = errors.New("the printer is still saving the files of the print")
 
 // PlateError means a .3mf holds several sliced plates and one must be chosen.
 type PlateError struct {
@@ -51,12 +60,19 @@ type Files struct {
 	ThreeMF    string // relative path or ""
 	Gcode      string // relative path or ""
 	AMSMapping []int  // filament index -> AMS slot, -1 for none
-	stamp      string // sizes and times of the files, part of the cache key
+	TaskID     string // of the print the .bbl was written for, "" without one
+	// Lenient accepts a .3mf other than the one the .bbl describes, with a
+	// warning, in case a printer describes it otherwise.
+	Lenient bool
+	stamp   string // sizes and times of the files, part of the cache key
+	md5     string // of the .3mf, as the .bbl tells it; "" when not known
 }
 
 type bbl struct {
 	FilePath   string `json:"file path"`
 	AMSMapping []int  `json:"ams mapping"`
+	SubtaskID  string `json:"subtask id"`
+	MD5        string `json:"md5"` // of the .3mf
 }
 
 // sdCard is the part of ftps.Conn that Find needs.
@@ -93,15 +109,17 @@ func Find(c sdCard, subtask, gcodeFile string) (*Files, error) {
 	if meta != nil {
 		var b bbl
 		if data, readErr := readAll(c, "cache/"+meta.Name, 1<<20); readErr == nil && json.Unmarshal(data, &b) == nil {
-			f.AMSMapping = b.AMSMapping
+			f.AMSMapping, f.TaskID = b.AMSMapping, b.SubtaskID
 			if b.FilePath != "" {
-				f.ThreeMF = ftps.Path(b.FilePath)
+				f.ThreeMF, f.md5 = ftps.Path(b.FilePath), b.MD5
 				base = strings.TrimSuffix(path.Base(b.FilePath), ".3mf")
 			}
 		}
 	}
+	plateOfGcode := false
 	if f.Plate == 0 {
 		// No .bbl: take the newest <name>_plate_N.gcode.
+		plateOfGcode = true
 		var newest *ftp.Entry
 		for _, e := range entries {
 			if n, ok := plateOf(e.Name, base+"_plate_"); ok && (newest == nil || e.Time.After(newest.Time)) {
@@ -129,6 +147,20 @@ func Find(c sdCard, subtask, gcodeFile string) (*Files, error) {
 			}
 		}
 	}
+	// A G-code of an earlier print of the same name, e.g. before the
+	// project was changed and sent again, must not stand in for the .3mf:
+	// recent firmware no longer writes one beside it, so an old one stays.
+	// The two belong together only when written at about the same time; the
+	// clock of the card jumps by hours at times, so a newer one is no proof.
+	if f.ThreeMF != "" && f.Gcode != "" {
+		g, m := entryOf(c, byName, f.Gcode), entryOf(c, byName, f.ThreeMF)
+		if g != nil && m != nil && g.Time.Sub(m.Time).Abs() > pairWindow {
+			f.Gcode = ""
+			if plateOfGcode {
+				f.Plate = 0
+			}
+		}
+	}
 	if f.ThreeMF == "" && f.Gcode == "" {
 		return nil, ErrNotFound
 	}
@@ -139,6 +171,10 @@ func Find(c sdCard, subtask, gcodeFile string) (*Files, error) {
 	}
 	return f, nil
 }
+
+// pairWindow is how far apart the times of a .3mf and the G-code written
+// beside it may be: the listing tells minutes, and writing them takes a few.
+const pairWindow = 2 * time.Minute
 
 // entryOf returns the listing entry of the file at p, from the listing of
 // cache/ or, for a file elsewhere, its own directory; nil when missing.
@@ -226,7 +262,9 @@ const detailsVersion = 2
 // Build returns cached geometry for the print, creating it when needed. The
 // .3mf is preferred because it is compressed and also holds the thumbnail;
 // the plain G-code is the fallback.
-func Build(c *ftps.Conn, f *Files, store *cache.Cache) (*Result, error) {
+// A .3mf other than the one its .bbl describes fails with ErrNotReady,
+// unless f.Lenient; the G-code then does not stand in for it.
+func Build(c sdCard, f *Files, store *cache.Cache) (*Result, error) {
 	key := cache.Key(f.ThreeMF, f.Gcode, strconv.Itoa(f.Plate), f.stamp)
 	if r, ok := cached(store, key); ok {
 		return r, nil
@@ -236,13 +274,19 @@ func Build(c *ftps.Conn, f *Files, store *cache.Cache) (*Result, error) {
 	var png []byte
 	var errs []error
 	if f.ThreeMF != "" {
-		m, img, err := from3MF(c, f.ThreeMF, f.Plate)
+		m, img, err := from3MF(c, f.ThreeMF, f.Plate, f.md5, f.Lenient)
+		if errors.Is(err, ErrNotReady) {
+			return nil, err
+		}
 		model, png = m, img
 		if err != nil {
 			errs = append(errs, err)
 		}
 	}
 	if model == nil && f.Gcode != "" {
+		if len(errs) > 0 {
+			slog.Warn("the .3mf of the print is not usable, its G-code is used", "3mf", f.ThreeMF, "gcode", f.Gcode, "err", errs[0])
+		}
 		rc, err := c.Open(f.Gcode)
 		if err == nil {
 			model, err = gcode.Parse(rc)
@@ -333,7 +377,9 @@ func save(store *cache.Cache, key string, model *gcode.Model, png []byte) (*Resu
 
 // from3MF downloads a .3mf and returns its plate thumbnail and, when the
 // archive contains it, the parsed plate G-code.
-func from3MF(c *ftps.Conn, p string, plate int) (*gcode.Model, []byte, error) {
+// from3MF downloads and parses a .3mf, which must have the md5 sum want
+// unless it is "" or lenient is set.
+func from3MF(c sdCard, p string, plate int, want string, lenient bool) (*gcode.Model, []byte, error) {
 	tmp, err := os.CreateTemp("", "bblv-*.3mf")
 	if err != nil {
 		return nil, nil, err
@@ -344,12 +390,19 @@ func from3MF(c *ftps.Conn, p string, plate int) (*gcode.Model, []byte, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("%s: %w", p, err)
 	}
-	size, err := io.Copy(tmp, rc)
+	sum := md5.New()
+	size, err := io.Copy(io.MultiWriter(tmp, sum), rc)
 	if cerr := rc.Close(); err == nil {
 		err = cerr
 	}
 	if err != nil {
 		return nil, nil, fmt.Errorf("%s: %w", p, err)
+	}
+	if got := hex.EncodeToString(sum.Sum(nil)); want != "" && !strings.EqualFold(got, want) {
+		if !lenient {
+			return nil, nil, fmt.Errorf("%s: %w", p, ErrNotReady)
+		}
+		slog.Warn("the .3mf is not the one its .bbl describes, it is used anyway", "3mf", p, "md5", got, "bbl md5", want)
 	}
 	zr, err := zip.NewReader(tmp, size)
 	if err != nil {

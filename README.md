@@ -303,7 +303,12 @@ card over FTPS, parses it once and caches the result:
 - **A1** (and printers that write `.bbl` files): `cache/<name>.3mf`, which
   contains the sliced G-code and the plate thumbnail; the plate number and
   the AMS mapping come from the `N_<name>.bbl` file the printer writes next
-  to it. This is tested with prints sent through the cloud to an A1.
+  to it. This is tested with prints sent through the cloud to an A1. The
+  printer saves those files after such a print began, over the files of an
+  earlier print of the same name; bblv shows "loading" and tries again
+  until the `.bbl` names the print and the `.3mf` has the md5 sum the
+  `.bbl` gives. A `<name>_plate_N.gcode` beside it, which older firmware
+  wrote, is only used when written at the same time as the `.3mf`.
 - **X2D, P2S, H2S**: the printer keeps `cache/<name>.gcode.3mf` and reports
   the G-code path inside the printer, `/data/Metadata/plate_N.gcode`; the
   plate number comes from that path.

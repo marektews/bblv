@@ -50,6 +50,9 @@ type Geometry struct {
 	Settings *gcode.Settings `json:"settings,omitempty"` // slicer profiles
 
 	path, thumbPath string
+	// notReady: the files on the SD card are not yet those of the print;
+	// they are fetched again a while later, Loading meanwhile.
+	notReady bool
 }
 
 func ready(res *printjob.Result) Geometry {

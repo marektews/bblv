@@ -26,6 +26,9 @@ const (
 	// unreachableReminder: every so many failed connection attempts, an
 	// hour at retryInterval, the warning about it is repeated.
 	unreachableReminder = 120
+	// strictAttempts is how many attempts wait for the files the .bbl on the
+	// SD card describes; later ones take what is there.
+	strictAttempts = 4
 )
 
 // testedModels are verified on real hardware; the others are experimental.
@@ -59,7 +62,11 @@ type Printer struct {
 }
 
 type job struct {
-	id, subtask, gcodeFile string
+	id, subtask, gcodeFile, taskID string
+	attempt                        int // 1 for the first
+	// lenient takes the files on the SD card also when they are not those
+	// the .bbl describes; see printjob.Files.
+	lenient bool
 }
 
 func newPrinter(m *Monitor, id, name, model string, src source) *Printer {
@@ -251,6 +258,7 @@ func (p *Printer) nextJob(s printer.Status) *job {
 		return nil
 	}
 	id := s.Subtask + "\x00" + s.TaskID
+	active := s.State == "PREPARE" || s.State == "RUNNING" || s.State == "PAUSE"
 	switch {
 	case id != p.job:
 		p.job = id
@@ -265,11 +273,10 @@ func (p *Printer) nextJob(s printer.Status) *job {
 		}
 	case p.fetching:
 		return nil
-	case p.geom.State == GeometryLoading:
+	case p.geom.State == GeometryLoading && !p.geom.notReady:
 		// Begun while the download for the print before was ending.
 	default:
-		failed := p.geom.State == GeometryMissing || p.geom.State == GeometryError
-		active := s.State == "PREPARE" || s.State == "RUNNING" || s.State == "PAUSE"
+		failed := p.geom.State == GeometryMissing || p.geom.State == GeometryError || p.geom.notReady
 		if !failed || !active || p.attempts >= maxAttempts || time.Since(p.lastAttempt) < retryInterval {
 			return nil
 		}
@@ -283,7 +290,13 @@ func (p *Printer) nextJob(s printer.Status) *job {
 	p.fetching = true
 	p.attempts++
 	p.lastAttempt = time.Now()
-	return &job{id: id, subtask: s.Subtask, gcodeFile: s.GcodeFile}
+	// A few attempts wait for the files of an active print, which the
+	// printer writes after a print sent from the cloud began; later ones
+	// take what is there, in case a printer describes its files otherwise.
+	// Nothing is written for a print that is not running, nor is it fetched
+	// again, so its files are taken at once.
+	lenient := p.attempts > strictAttempts || !active
+	return &job{id: id, subtask: s.Subtask, gcodeFile: s.GcodeFile, taskID: s.TaskID, attempt: p.attempts, lenient: lenient}
 }
 
 // fetch downloads the files of print j until fctx ends; ctx is that of the
@@ -330,7 +343,21 @@ func (p *Printer) fetchFTPS(ctx context.Context, j job) Geometry {
 	if err != nil {
 		return fail(err)
 	}
+	notReady := func(why string) Geometry {
+		slog.Info("print files not saved yet, fetching them again later", "printer", p.id, "print", j.subtask, "attempt", j.attempt, "why", why)
+		return Geometry{State: GeometryLoading, notReady: true}
+	}
+	files.Lenient = j.lenient
+	if files.TaskID != "" && j.taskID != "" && j.taskID != "0" && files.TaskID != j.taskID {
+		if !files.Lenient {
+			return notReady("the .bbl is of task " + files.TaskID)
+		}
+		slog.Warn("the .bbl names another print, its files are used anyway", "printer", p.id, "print", j.subtask, "task", j.taskID, "bbl task", files.TaskID)
+	}
 	res, err := printjob.Build(conn, files, p.m.store)
+	if errors.Is(err, printjob.ErrNotReady) {
+		return notReady(err.Error())
+	}
 	if err != nil {
 		return fail(err)
 	}

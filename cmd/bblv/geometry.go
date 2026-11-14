@@ -85,7 +85,8 @@ func runGeometry(args []string) error {
 	if err != nil {
 		return err
 	}
-	slog.Info("print files", "plate", files.Plate, "3mf", files.ThreeMF, "gcode", files.Gcode, "ams_mapping", files.AMSMapping)
+	slog.Info("print files", "plate", files.Plate, "3mf", files.ThreeMF, "gcode", files.Gcode, "ams_mapping", files.AMSMapping, "task", files.TaskID)
+	files.Lenient = true // what is on the card, also while the printer writes it
 
 	store, err := cache.Open(filepath.Join(*dataDir, "cache"), cache.DefaultLimit)
 	if err != nil {
