@@ -7,7 +7,7 @@ require (
 	github.com/jlaffaye/ftp v0.2.4
 	github.com/kardianos/service v1.3.0
 	golang.org/x/crypto v0.58.0
-	golang.org/x/sys v0.49.0
+	golang.org/x/sys v0.50.0
 )
 
 require (
